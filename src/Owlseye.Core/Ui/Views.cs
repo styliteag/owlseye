@@ -165,7 +165,7 @@ public sealed record FolderPanel(Folder F, string Share, bool CanAdd, IReadOnlyL
 public sealed record GroupsPanel(string Gq, IReadOnlyList<Principal> Hits, IReadOnlySet<string> Shown, bool HiddenHint);
 
 public sealed record PreviewView(Plan? Plan, string? Error, IReadOnlyList<Impact> Gained, IReadOnlyList<Impact> Lost, int Cells,
-    string Phash, IReadOnlyList<HiddenLoss>? HiddenLosses = null);
+    string Phash, IReadOnlyList<HiddenLoss>? HiddenLosses = null, IReadOnlyList<Principal>? Required = null);
 
 public sealed record DriftView(IReadOnlyList<DriftItem> Items, IReadOnlyList<Impact> Impact, BaselineInfo Info, string BaselineError,
     Desired Desired, string AuditPath, string TakenAt, string Share);

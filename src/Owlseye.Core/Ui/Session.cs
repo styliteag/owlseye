@@ -329,6 +329,7 @@ public sealed partial class Session(State st)
     {
         Plan? plan;
         string? err = null;
+        List<Principal> required;
         lock (St.Lock)
         {
             try
@@ -340,12 +341,13 @@ public sealed partial class Session(State st)
                 plan = null;
                 err = e.Message;
             }
+            required = St.Ready ? Rights.RequiredFullControl(St.Snap) : [];
         }
         var gained = plan?.Impact.Where(Planner.Gained).ToList() ?? [];
         var lost = plan?.Impact.Where(i => !Planner.Gained(i)).ToList() ?? [];
         var cells = plan?.AclOps.Sum(o => o.Changes.Count) ?? 0;
         return new PreviewView(plan, err, gained, lost, cells, plan is not null ? State.PlanHash(plan) : "",
-            plan is not null ? Planner.HiddenLosses(plan) : []);
+            plan is not null ? Planner.HiddenLosses(plan) : [], required);
     }
 
     /// <summary>Checks against the file system as it is now, not against the snapshot: the new ACL is computed from the

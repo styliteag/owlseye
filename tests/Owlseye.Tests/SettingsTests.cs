@@ -47,6 +47,11 @@ public sealed class SettingsTests : TestBase, IDisposable
         s.SetCell(Demo.Gsid("G-HR"), "HR", "R"); // HR has broken inheritance: owlseye completes the required entries
         var after = s.Preview().Plan!.AclOps.Single(o => o.Path == "HR").After;
         Assert.Contains(after, a => a.Sid == DomainAdmins && a.Mask == M.Full && a.Flags == M.OiCi);
+        // the preview names the added entry, apart from the cell changed by hand
+        var preview = s.Preview();
+        var op = preview.Plan!.AclOps.Single(o => o.Path == "HR");
+        Assert.Equal([DomainAdmins], Planner.AddedFullControl(op, preview.Required!).Select(a => a.Sid));
+        Assert.Equal(["SYSTEM", "Domain Admins"], preview.Required!.Select(p => p.Name));
     }
 
     [Fact]

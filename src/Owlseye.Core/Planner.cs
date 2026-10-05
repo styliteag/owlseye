@@ -280,6 +280,17 @@ public static class Planner
 
     public static bool Gained(Impact i) => M.Rank(i.After) > M.Rank(i.Before);
 
+    /// <summary>Full-control entries owlseye adds on a folder it writes because config.json "full_control" requires them
+    /// (Acl.EnsureAdmins): accounts of `required` with full control after, not before, and not a cell set by hand.</summary>
+    public static List<Ace> AddedFullControl(AclOp op, IEnumerable<Principal> required)
+    {
+        static bool Full(Ace a) => a.Allow && (a.Mask & M.Full) == M.Full && (a.Flags & M.OiCi) == M.OiCi;
+        var want = required.Select(p => p.Sid).ToHashSet();
+        var had = op.Before.Where(Full).Select(a => a.Sid).ToHashSet();
+        var changed = op.Changes.Select(c => c.Sid).ToHashSet();
+        return op.After.Where(a => Full(a) && want.Contains(a.Sid) && !had.Contains(a.Sid) && !changed.Contains(a.Sid)).ToList();
+    }
+
     /// <summary>Rights a change removes although the cell still grants something afterwards, beyond what the visible
     /// step (e.g. W -> R) explains: delete, change permissions, take ownership. Happens when a special entry (full
     /// control, Modify while W means "no delete", …) is replaced by a standard entry. The matrix and the user impact

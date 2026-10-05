@@ -80,13 +80,19 @@ else
           <td>@Labels.Short(c.Before)</td><td class="@(c.After is not null ? "gain" : "loss")">@Labels.Short(c.After)</td>
           <td>@if (c.Auto) {<span class="sev low">automatic R|</span>}</td></tr>
       }
+      var added = Planner.AddedFullControl(o, V.Required ?? []);
+      if (added.Count > 0)
+      {
+        <tr><td class="mono">@Root(o.Path)</td><td>@string.Join(", ", added.Select(a => ShortName(a.Name)))</td><td>–</td><td class="gain">F</td>
+          <td><span class="sev low" title="config.json &quot;full_control&quot; (Settings)">full control required</span></td></tr>
+      }
     }
   </table>
   @if (plan.AclOps.Count > MaxOps)
   {
     <p class="muted small">The first @MaxOps of @plan.AclOps.Count folders are listed; apply writes all of them.</p>
   }
-  <p class="muted small">Only the entries listed change. Entries of other accounts, deny entries and special rights stay as they are; on folders with broken inheritance SYSTEM and Administrators keep (or get) full control. Windows applies each change to all subfolders; on large trees this can take a while.</p>
+  <p class="muted small">Only the entries listed change. Entries of other accounts, deny entries and special rights stay as they are; on folders with broken inheritance @(V.Required is { Count: > 0 } req ? string.Join(", ", req.Select(p => ShortName(p.Name))) : "SYSTEM and Administrators") keep (or get) full control (Settings: full control). Windows applies each change to all subfolders; on large trees this can take a while.</p>
   @if (plan.AclOps.SelectMany(o => o.Changes).Any(c => c.After == "F" && c.Before != "F"))
   {
     <p class="flash">F (full control) also lets the members of the group change the folder's permissions and take ownership
