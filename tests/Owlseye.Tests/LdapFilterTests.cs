@@ -1,4 +1,4 @@
-// Port of backend/tests/test_ldapfilter.py.
+// LDAP filters as the sim directory parses and matches them.
 
 using Owlseye.Providers;
 
@@ -38,7 +38,7 @@ public class LdapFilterTests : TestBase
         Assert.Equal(expected, LdapFilter.Matches(LdapFilter.Parse(flt), Group));
     }
 
-    // Python raises ValueError; the C# port raises FormatException.
+    // Unsupported filters throw FormatException.
     [Theory]
     [InlineData("(groupType>=2)")]
     [InlineData("(cn~=x)")]

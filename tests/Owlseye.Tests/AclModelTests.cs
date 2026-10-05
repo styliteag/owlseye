@@ -1,5 +1,4 @@
 // ACL model: cells from ACEs, inheritance, user rights, findings (demo share like the Excel list).
-// Port of backend/tests/test_acl_model.py.
 
 using Owlseye.Providers;
 

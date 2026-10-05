@@ -1,4 +1,4 @@
-// Beyond the Python version: members through the primary group (Domain Users is not in its own "member" attribute).
+// Members through the primary group (Domain Users is not in its own "member" attribute).
 
 using System.Text.Json.Nodes;
 using Owlseye.Providers;

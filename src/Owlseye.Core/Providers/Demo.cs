@@ -17,7 +17,7 @@ public static class Demo
         ("mmoore", "Mia Moore"), ("nnelson", "Noah Nelson"), ("oowen", "Olivia Owen"),
     ];
 
-    /// <summary>Universal security groups; members: users or groups (ordered like the Python dict).</summary>
+    /// <summary>Universal security groups; members: users or groups (in this order).</summary>
     public static readonly (string Sam, string[] Members)[] Groups =
     [
         ("G-AllUsers", Users.Select(u => u.Sam).ToArray()),

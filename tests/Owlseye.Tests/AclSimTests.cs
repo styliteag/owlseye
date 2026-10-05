@@ -1,5 +1,4 @@
-// Port of backend/tests/test_acl_sim.py.
-// Sim-Provider: same logic as on Windows (AdProvider) against emulated AD and file system.
+// Sim provider: same logic as on Windows (AdProvider) against emulated AD and file system.
 
 using System.Text.Json.Nodes;
 using Owlseye.Providers;
@@ -11,7 +10,7 @@ public sealed class AclSimTests : TestBase
 {
     const string OPS = "Operations";
 
-    /// <summary>sim_dir fixture</summary>
+    /// <summary>A seeded sim directory.</summary>
     readonly string simDir;
 
     public AclSimTests() => simDir = SimSeed.Seed(Path.Combine(Tmp, "sim"));
@@ -184,7 +183,6 @@ public sealed class AclSimTests : TestBase
         foreach (var bad in new[] { @"HR\New", @"Nope\X", @"HR\CON", "HR\\x." }) // how deep is checked by the planner
         {
             var e = Record.Exception(() => p.CreateFolder(bad));
-            // pytest.raises((PermissionError, FileExistsError))
             Assert.True(e is UnauthorizedAccessException || e?.GetType() == typeof(IOException), $"{bad}: {e?.GetType().Name ?? "no exception"}");
         }
     }
@@ -220,7 +218,7 @@ public sealed class AclSimTests : TestBase
         Assert.All(new SimProvider(simDir).Scan().Folders.Keys, p => Assert.DoesNotContain("\\..", p));
     }
 
-    /// <summary>monkeypatch of SimFs.subdirs: listing one folder is not allowed.</summary>
+    /// <summary>A sim file system where listing one folder is not allowed.</summary>
     sealed class SubdirsDenied(IFilesystem real, string denied) : IFilesystem
     {
         public HashSet<string> Links => real.Links;

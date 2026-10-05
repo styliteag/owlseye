@@ -1,7 +1,6 @@
-// Port of backend/tests/test_progress.py.
 // Progress: the first scan runs behind a progress page; apply shows its progress and logs every write at once.
-// The UI shows the progress page while !State.Ready (or State.LoadError) and renders State.Progress.Now; /health
-// "busy" is Progress.Now.Task == "apply".
+// The UI shows the progress page while !State.Ready (or State.LoadError) and renders State.Progress.Now; the window
+// counts as busy while Progress.Now.Task == "apply".
 
 using System.Text.Json.Nodes;
 using Owlseye.Providers;
@@ -43,8 +42,7 @@ public sealed class ProgressTests : TestBase
         public List<Principal> FindGroups(string q) => inner.FindGroups(q);
     }
 
-    /// <summary>Another provider with its own share (Python: other.share = …) and a hook before each ACL write
-    /// (Python: monkeypatch of SimFs.write_dacl); the hook may block.</summary>
+    /// <summary>Another provider with its own share and a hook before each ACL write; the hook may block.</summary>
     sealed class Hooked(IProvider inner, string? share = null) : IProvider
     {
         public Action<string>? BeforeSetAcl { get; set; }
@@ -69,7 +67,7 @@ public sealed class ProgressTests : TestBase
 
     string LogPath => Path.Combine(Tmp, "a.jsonl");
 
-    /// <summary>create_app(cfg, provider, token, open_share, scan_in_background).</summary>
+    /// <summary>State and Session; optionally a share opener and the first scan in the background.</summary>
     (State St, Session S) Client(IProvider provider, Func<string, IProvider>? openShare = null, bool scanInBackground = false)
     {
         var cfg = new Config { Provider = provider.Name, Audit = LogPath, Baseline = Path.Combine(Tmp, "base") };
@@ -91,7 +89,7 @@ public sealed class ProgressTests : TestBase
 
     static Outcome Apply(Session s, string reason = "") => s.Apply(reason, s.Preview().Phash);
 
-    /// <summary>/health: {"ok": true, "provider": …, "busy": …}</summary>
+    /// <summary>The provider and whether an apply is running (then the window asks before it closes).</summary>
     static (string Provider, bool Busy) Health(State st) => (st.Provider.Name, st.Progress.Now.Task == "apply");
 
     static List<string> Columns(Session s) => s.Matrix().Columns.Select(p => p.Short).ToList();
@@ -107,16 +105,16 @@ public sealed class ProgressTests : TestBase
         var free = Monitor.TryEnter(st.Lock);
         if (free) Monitor.Exit(st.Lock);
         Assert.False(free);
-        // /users shows the progress page (hx-get="/progress?page=1") instead of the users
+        // the pages show the progress instead of their content
         Assert.False(st.Ready);
         Assert.Equal("", st.LoadError);
         Assert.True(st.Loading);
         // "Reading folders", "7 folders read", "Projects"
         Assert.Equal(new Status("scan", "Reading folders", "Projects", 7, 0), st.Progress.Now);
-        // no HX-Refresh on /progress?page=1 yet: the progress page reloads once ready or an error is set
+        // not ready yet: the progress page reloads once ready or an error is set
         p.Go.Set();
         Settled(st);
-        Assert.True(st.Ready); // HX-Refresh: true, the progress page reloads into /users
+        Assert.True(st.Ready); // the progress page gives way to the page
         Assert.Equal("", st.LoadError);
         Assert.Contains("G-Sales-Lead", Columns(s));
     }
@@ -128,13 +126,13 @@ public sealed class ProgressTests : TestBase
         p.Go.Set();
         var (st, s) = Client(p, scanInBackground: true);
         Settled(st);
-        // the page shows the error and a "Try again" button (action="/load")
+        // the page shows the error and a "Try again" button
         Assert.False(st.Ready);
         Assert.Equal("The network path was not found", st.LoadError);
-        Assert.Null(st.OpenShare); // 'action="/share"' not in the page: demo, the share is fixed
-        // HX-Refresh: true on /progress?page=1: the progress page shows the error (Settled returned on LoadError)
+        Assert.Null(st.OpenShare); // demo: the share is fixed, no other folder offered
+        // the progress page shows the error (Settled returned on LoadError)
         p.Fail = "";
-        st.LoadInBackground(); // POST /load
+        st.LoadInBackground(); // "Try again"
         Settled(st);
         Assert.True(st.Ready);
         Assert.Contains("G-Sales-Lead", Columns(s));
@@ -148,7 +146,7 @@ public sealed class ProgressTests : TestBase
         var other = new Hooked(new DemoProvider(), @"\\fs02\Data");
         var (st, s) = Client(p, openShare: _ => other, scanInBackground: true);
         Settled(st);
-        // 'action="/share"' in the page: the error page offers another folder
+        // the error page offers another folder
         Assert.Equal("Access is denied", st.LoadError);
         Assert.NotNull(st.OpenShare);
         s.OpenShare(@"\\fs02\Data");
@@ -158,14 +156,6 @@ public sealed class ProgressTests : TestBase
         Assert.Equal(@"\\fs02\Data", Settings.LastShare("demo")); // opened again at the next start
     }
 
-    [Fact(Skip = "No HTTP in the native app (port-spec X-4): data-busy on the rescan and share forms made busy.js poll "
-        + "/progress and show an overlay during the long POST. The Blazor UI runs Session.Rescan/OpenShare/Apply off the "
-        + "UI thread and renders State.Progress (Progress.Changed) instead; the progress values are checked in "
-        + "PagesShowTheProgressUntilTheFirstScanIsDone and ProgressAndHealthShowARunningApply.")]
-    public void FormsThatScanShowTheOverlay()
-    {
-    }
-
     [Fact]
     public async Task ProgressAndHealthShowARunningApply()
     {
@@ -173,14 +163,13 @@ public sealed class ProgressTests : TestBase
         var (st, s) = Client(p);
         using (st.Progress.Task("apply", "Writing ACLs", 5))
         {
-            st.Progress.Set(done: 2, path: @"HR\Protokolle");
+            st.Progress.Set(done: 2, path: @"HR\Minutes");
             Assert.True(Health(st).Busy); // the window asks before it closes
-            // "Writing ACLs", "2 of 5 done", "HR\Protokolle", "Keep owlseye open" (shown for task "apply")
-            Assert.Equal(new Status("apply", "Writing ACLs", @"HR\Protokolle", 2, 5), st.Progress.Now);
+            // "Writing ACLs", "2 of 5 done", "HR\Minutes", "Keep owlseye open" (shown for task "apply")
+            Assert.Equal(new Status("apply", "Writing ACLs", @"HR\Minutes", 2, 5), st.Progress.Now);
         }
         Assert.False(Health(st).Busy);
         Assert.Equal(new Status(), st.Progress.Now);
-        // "HX-Refresh" not in /progress: an HTTP detail, nothing to port
 
         // The same during a real apply, held at its second ACL write (Operations, after the root)
         s.SetCell(Demo.Gsid("G-Interns"), SalesQa, "R");

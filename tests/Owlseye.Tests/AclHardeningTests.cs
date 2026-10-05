@@ -1,4 +1,3 @@
-// Port of backend/tests/test_acl_hardening.py.
 // Hardening of the ACL write path (security review): stale inheritance, foreign ACE types, SID instead of name.
 
 using System.Text.Json.Nodes;
@@ -11,14 +10,14 @@ public sealed class AclHardeningTests : TestBase
 {
     const string Quotes = @"Sales\Quotes";
 
-    /// <summary>sim_dir fixture</summary>
+    /// <summary>A seeded sim directory.</summary>
     readonly string simDir;
 
     public AclHardeningTests() => simDir = SimSeed.Seed(Path.Combine(Tmp, "sim"));
 
     string Share => Path.Combine(simDir, SimProvider.ShareDir);
 
-    /// <summary>create_app(Config(provider="sim", audit=tmp_path/"a.jsonl"), SimProvider(sim_dir), "tok") + TestClient.</summary>
+    /// <summary>State on the sim with the log in the temp folder, first scan done, and a Session on it.</summary>
     static Session Client(string simDir, string tmp)
     {
         var st = new State(new Config { Provider = "sim", Audit = Path.Combine(tmp, "a.jsonl") }, new SimProvider(simDir));
@@ -49,10 +48,10 @@ public sealed class AclHardeningTests : TestBase
             ["id"] = "x1", ["ts"] = "t", ["share"] = @"\\fs02\Other", ["ops"] = new JsonArray(), ["acl_ops"] = new JsonArray(), ["actor"] = "A",
         };
         File.WriteAllText(log, File.ReadAllText(log) + entry.ToJsonString() + "\n{broken\n" + "{\"ts\": \"no id\"}\n");
-        // c.get("/audit").status_code == 200
+        // the log page still opens
         var page = c.AuditPage();
         Assert.Contains(page.Entries, e => e.Str("id") == "x1");
-        // c.post("/undo/x1").status_code == 400
+        // undoing another share's entry is refused
         var err = Assert.Throws<UserError>(() => c.Undo("x1"));
         Assert.Equal(400, err.Status);
     }
@@ -72,20 +71,18 @@ public sealed class AclHardeningTests : TestBase
     {
         var outside = Path.Combine(Tmp, "outside");
         Directory.CreateDirectory(outside);
-        if (!Symlink(Path.Combine(Share, "Link"), outside)) return; // pytest.skip: symlinks need developer mode or admin rights
+        if (!Symlink(Path.Combine(Share, "Link"), outside)) return; // skipped: symlinks need developer mode or admin rights
         Assert.DoesNotContain("Link", new SimProvider(simDir).Scan().Folders.Keys);
     }
 
     [Fact]
     public void InheritValueIsValidated()
     {
-        // Python: POST /folder/inheritance with path=Sales\Quotes, inherit="x" -> 400.
-        // In C# Session.SetInheritance takes `bool inherit`: a value other than inherit/break cannot be passed at all.
+        // Session.SetInheritance takes `bool inherit`: a value other than inherit/break cannot be passed at all.
         var c = Client(simDir, Tmp);
         var param = typeof(Session).GetMethod(nameof(Session.SetInheritance))!.GetParameters().Single(p => p.Name == "inherit");
         Assert.Equal(typeof(bool), param.ParameterType);
-        // The same request otherwise: Sales\Quotes is not in the demo share, so the route answers 400 (in Python this
-        // check runs before the one on `inherit`).
+        // A folder that is not in the share is refused.
         var err = Assert.Throws<UserError>(() => c.SetInheritance(Quotes, false));
         Assert.Equal(400, err.Status);
     }
@@ -97,7 +94,7 @@ public sealed class AclHardeningTests : TestBase
         // Win32 strips trailing dots/spaces: 'End.' would read the ACL of 'End'. Flag it, do not look inside.
         var pub = Path.Combine(Share, "Public");
         MkdirRaw(Path.Combine(pub, "End."));
-        Directory.CreateDirectory(RawPath(pub, "End.", "Deeper")); // mkdir_raw(bad / "Deeper")
+        Directory.CreateDirectory(RawPath(pub, "End.", "Deeper"));
         var s = new SimProvider(simDir).Scan();
         var f = s.Folders["Public\\End."];
         Assert.True(f.Error != "" && f.OtherAces);
@@ -123,8 +120,8 @@ public sealed class AclHardeningTests : TestBase
     public void SymlinkInsideTheShareIsRefusedForWrites()
     {
         // Also a link that points inside the share: the write must land where the admin clicked.
-        if (!Symlink(Path.Combine(Share, "Public", "Link"), Path.Combine(Share, "HR"))) return; // pytest.skip
-        var fs = new SimFs(new SimState(simDir), Share); // SimProvider(sim_dir).fs
+        if (!Symlink(Path.Combine(Share, "Public", "Link"), Path.Combine(Share, "HR"))) return; // skipped without symlink rights
+        var fs = new SimFs(new SimState(simDir), Share);
         Assert.Throws<UnauthorizedAccessException>(() => fs.WriteDacl("Public\\Link", true, []));
         Assert.Throws<UnauthorizedAccessException>(() => fs.Mkdir("Public\\Link\\New"));
         Assert.False(Directory.Exists(Path.Combine(Share, "HR", "New")));
@@ -149,7 +146,7 @@ public sealed class AclHardeningTests : TestBase
     [Fact]
     public void DeepTreeDoesNotHitTheRecursionLimit()
     {
-        // Python lowers sys.setrecursionlimit to 120 here; C# has no such limit to lower, the walk is iterative.
+        // 60 levels: the walk is iterative, nothing recursive to overflow.
         var p = Path.Combine(Share, "Public");
         for (var i = 0; i < 60; i++) p = Path.Combine(p, "d");
         Directory.CreateDirectory(p);
@@ -161,7 +158,7 @@ public sealed class AclHardeningTests : TestBase
     public void WriteRefusedAboveALinkSeenInTheSubtree()
     {
         // Inheritance propagation walks the subtree by name; a link below could carry it outside the share.
-        if (!Symlink(Path.Combine(Share, "Public", "Link"), Tmp)) return; // pytest.skip
+        if (!Symlink(Path.Combine(Share, "Public", "Link"), Tmp)) return; // skipped without symlink rights
         var p = new SimProvider(simDir);
         p.Scan();
         var e = Assert.Throws<UnauthorizedAccessException>(() => p.SetFolderAcl("Public", true, []));

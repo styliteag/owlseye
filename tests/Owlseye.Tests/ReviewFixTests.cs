@@ -1,4 +1,4 @@
-// Fixes from the code review of the port; several of these bugs were in the Python version as well.
+// Fixes from code reviews.
 
 using System.Text.Json.Nodes;
 using Owlseye.Providers;

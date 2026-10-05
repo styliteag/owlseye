@@ -35,7 +35,7 @@ The masks live in one place (`src/Owlseye.Core/Model.cs`: `M.Read`, `M.Write`, `
 
 ## Structure
 
-A native Windows app: one process, no web server, no Electron. C# on .NET 10, WPF window with Blazor Hybrid
+A native Windows app: one process, no web server. C# on .NET 10, WPF window with Blazor Hybrid
 (the pages are Razor components rendered in WebView2 and call the logic directly).
 
 ```
@@ -47,19 +47,17 @@ src/Owlseye.Core/        platform-neutral logic (net10.0, runs and is tested on 
   Baseline.cs, Drift.cs    desired state (desired-<share>.json) and desired/actual comparison
   Audit.cs                 audit.jsonl, append-only with file lock
   State.cs, Launch.cs      session state, start rules
-  Ui/Session.cs, Views.cs  what the pages show and do (the former HTTP routes), testable without UI
+  Ui/Session.cs, Views.cs  what the pages show and do, testable without UI
   Providers/               AdProvider (logic over the ports), Demo, Sim (emulated AD + real folder tree), LDAP filter
 src/Owlseye.Windows/     Win32 adapters (net10.0-windows): DACLs via handle chain, SID lookup, ADSI, local SAM, local seed
 src/Owlseye.App/         the exe: WPF window, Razor pages and panels, wwwroot (CSS, keyboard script) embedded
-tests/Owlseye.Tests/     xUnit port of the Python tests (any OS)
+tests/Owlseye.Tests/     xUnit tests of the logic and the view models (any OS)
 tests/Owlseye.Windows.Tests/  integration tests against real NTFS ACLs and the local user database (no admin needed)
-docs/                    user stories (with screenshots), ADR 0001 (why C#), the requirements spec of the port
+docs/                    user stories (with screenshots), requirements spec, ADR 0001 (why a native C# app)
 tools/screenshots.mjs    regenerates docs/screenshots from the demo data (node tools/screenshots.mjs publish/owlseye.exe)
 ```
 
-The Python/Electron proof of concept this was ported from is not part of this repository.
-
-Data stays compatible with the PoC: `settings.json` in `%LOCALAPPDATA%\owlseye`; `desired-<share>.json` and
+Where owlseye keeps its data: `settings.json` in `%LOCALAPPDATA%\owlseye`; `desired-<share>.json` and
 `audit-<provider>.jsonl` in the state folder, by default `%LOCALAPPDATA%\owlseye` too (Settings, config.json `state`). The browser profile of the window lives in
 `%LOCALAPPDATA%\owlseye\WebView2`, unexpected errors go to `%LOCALAPPDATA%\owlseye\error.log`.
 
@@ -232,10 +230,10 @@ if the folder holds none yet, or takes over what another admin keeps there.
 
 | Part | Status |
 | --- | --- |
-| Rights logic, planner (incl. automatic R\|), conflict check, log, undo, desired/actual | ported 1:1; `dotnet test`: 239 cases (all 166 PoC tests with their parametrized cases, plus start, Razor and primary-group checks), 236 pass, 3 HTTP-only ones are skipped with a reason; 13 more integration tests against real NTFS ACLs |
-| Pages and panels | all PoC pages as Razor components, checked in the running app (demo, sim, local) |
+| Rights logic, planner (incl. automatic R\|), conflict check, log, undo, desired/actual | `dotnet test`: 288 tests of the logic and the view models, plus 23 integration tests against real NTFS ACLs and the local user database |
+| Pages and panels | Razor components; a UI smoke test (`tests/e2e/smoke.mjs`) clicks through the core flow in the running exe |
 | Local provider (SAM + Win32 ACLs) | integration tests against real NTFS ACLs: read/write through the handle chain, junction refusal, conflict check, break/undo, new folders, paths beyond 260 characters |
-| Windows adapter (ADSI) | written against `System.DirectoryServices` (incl. member ranges of large groups and primary-group members such as Domain Users), **untested against a domain** (lab spike) |
+| Windows adapter (ADSI) | written against `System.DirectoryServices` (incl. member ranges of large groups and primary-group members such as Domain Users); first runs against a domain file server (scan of about 45,000 folders, groups, nested membership), **writing there not yet tested in a lab** |
 | Large shares | 2,100 folders × 60 groups: about 100 ms per change, matrix virtualized |
 | Scan | Windows/local read 8/4 folders at a time (network latency); same result as the sequential walk (tested) |
 | Packaging | exe plus native libraries in one folder, started from there; nothing extracted to `%TEMP%` (tested) |
@@ -270,13 +268,14 @@ Still open:
   Run owlseye elevated only for the local mode and only as long as needed; against a domain it runs unelevated
   anyway. The clean fix is an unelevated window with a small elevated helper that only writes ACLs.
 
-Known limitation (as in the PoC): owlseye writes through handles, and Win32 always asks for `SYNCHRONIZE` and read
+Known limitation: owlseye writes through handles, and Win32 always asks for `SYNCHRONIZE` and read
 attributes when opening one. A folder whose ACL grants the admin nothing but ownership (implicit `READ_CONTROL`/`WRITE_DAC`)
 therefore cannot be rewritten by owlseye; the apply stops with "access denied" and nothing is changed. `icacls` can.
 
 ## Next steps
 
-1. Lab spike in a test domain: Windows adapter against a real file server and DC (ADSI search by SID, nested groups).
+1. Lab test in a test domain: writing through the Windows adapter against a real file server and DC (cells,
+   break/restore, new folders, undo, conflict check).
 2. **Verify in the lab over SMB:** does `SetSecurityInfo` inheritance propagation follow junctions or symlinks that a
    user created *inside* the subtree? On local NTFS it does not (it updates the junction object, not its target; test
    `PropagationDoesNotFollowAJunctionOnLocalNtfs`). Until it is confirmed for shares, owlseye refuses to write above

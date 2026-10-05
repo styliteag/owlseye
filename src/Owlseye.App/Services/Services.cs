@@ -127,7 +127,7 @@ public sealed class UiState : IDisposable
     }
 
     /// <summary>Message at the top of the page. Set by an action (Go) it stays for the page the action leads to; set on
-    /// the page itself (SetFlash) it goes away with the next navigation, like ?msg= in the web version.</summary>
+    /// the page itself (SetFlash) it goes away with the next navigation.</summary>
     public (string Text, bool Error)? Flash { get; private set; }
     bool keepFlash;
 

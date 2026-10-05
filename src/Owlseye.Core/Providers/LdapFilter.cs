@@ -39,13 +39,13 @@ public static partial class LdapFilter
     public static LdapNode Parse(string flt)
     {
         var (node, end) = ParseAt(flt, 0);
-        if (end != flt.Length) throw new FormatException($"Trailing input after filter: {Py.Repr(flt[end..])}");
+        if (end != flt.Length) throw new FormatException($"Trailing input after filter: {Msg.Quote(flt[end..])}");
         return node;
     }
 
     static (LdapNode, int) ParseAt(string s, int i)
     {
-        if (i >= s.Length || s[i] != '(') throw new FormatException($"'(' expected at position {i}: {Py.Repr(s)}");
+        if (i >= s.Length || s[i] != '(') throw new FormatException($"'(' expected at position {i}: {Msg.Quote(s)}");
         i++;
         if (i < s.Length && "&|!".Contains(s[i]))
         {
@@ -59,11 +59,11 @@ public static partial class LdapFilter
                 i = next;
             }
             if (i >= s.Length || s[i] != ')' || children.Count == 0 || (op == "!" && children.Count != 1))
-                throw new FormatException($"Invalid expression {op} in {Py.Repr(s)}");
+                throw new FormatException($"Invalid expression {op} in {Msg.Quote(s)}");
             return (new LdapNode(op, children), i + 1);
         }
         var end = s.IndexOf(')', i);
-        if (end < 0) throw new FormatException($"')' missing: {Py.Repr(s)}");
+        if (end < 0) throw new FormatException($"')' missing: {Msg.Quote(s)}");
         return (ItemOf(s[i..end]), end + 1);
     }
 

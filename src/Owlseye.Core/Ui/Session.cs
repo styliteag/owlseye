@@ -1,5 +1,5 @@
-// What the routes did in the Python version: build the view models and carry out the actions.
-// The UI (Blazor) only renders these and calls the actions; no HTTP in between.
+// The pages' logic: builds the view models and carries out the actions.
+// The UI (Blazor) only renders these and calls the actions, so all of it can be tested without a UI.
 
 using System.Text.Json.Nodes;
 using Owlseye.Providers;

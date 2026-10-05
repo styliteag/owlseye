@@ -1,5 +1,4 @@
 // Planner: cells -> ACL operations, automatic R|, inheritance, new folders, effect on users.
-// Port of backend/tests/test_acl_planner.py.
 
 using Owlseye.Providers;
 
@@ -197,7 +196,7 @@ public class AclPlannerTests : TestBase
     public void ClearDeepDeviationAndDenyEntries()
     {
         var deep = $@"{OPS}\Sales-Staff\2025\Offsite";
-        var f = snap.Folders[deep]; // Python appends to f.aces in place; the C# records are immutable
+        var f = snap.Folders[deep]; // plus a deny entry
         snap.Folders[deep] = f with { Aces = [.. f.Aces, new Ace(Gsid("G-HR"), "DEMO\\G-HR", "group", 0x10000, Allow: false, Flags: 3)] };
         var op = Assert.Single(Planner.Build(snap, NoCells, clearIn: [deep]).AclOps);
         Assert.True(op.After.Count == 0 && !op.ProtectedAfter);

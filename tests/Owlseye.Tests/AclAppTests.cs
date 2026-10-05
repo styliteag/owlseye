@@ -1,7 +1,5 @@
-// Port of backend/tests/test_acl_app.py.
-// Web app in the ACL model: set cells, preview, apply against the sim, conflicts, undo, columns.
-// The routes are Session methods now; HTTP 400/404 is a UserError, a redirect with ?msg= an Outcome, and the
-// rendered HTML is checked through the view models the Blazor UI renders.
+// The app in the ACL model: set cells, preview, apply against the sim, conflicts, undo, columns. Checked through
+// Session and the view models the Blazor UI renders; a refused action is a UserError.
 
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -19,10 +17,10 @@ public sealed class AclAppTests : TestBase
 
     static string G(string sam) => Demo.Gsid(sam);
 
-    /// <summary>sim_dir fixture.</summary>
+    /// <summary>A seeded sim directory.</summary>
     string SimDir() => SimSeed.Seed(Path.Combine(Tmp, "sim"));
 
-    /// <summary>client(): create_app(cfg, provider, token) = State + Load + Session.</summary>
+    /// <summary>State with the provider, first scan done, and a Session on it.</summary>
     (State St, Session S) Client(IProvider provider)
     {
         var cfg = new Config { Provider = provider.Name, Audit = Path.Combine(Tmp, "a.jsonl"), Baseline = Path.Combine(Tmp, "base") };
@@ -31,7 +29,7 @@ public sealed class AclAppTests : TestBase
         return (st, new Session(st));
     }
 
-    /// <summary>The phash the preview page carried in its form.</summary>
+    /// <summary>The plan hash of the preview, which Apply checks.</summary>
     static string PreviewHash(Session s) => s.Preview().Phash;
 
     static Outcome Apply(Session s, string reason = "") => s.Apply(reason, PreviewHash(s));
@@ -76,11 +74,11 @@ public sealed class AclAppTests : TestBase
 
     static IEnumerable<JsonObject> AclOps(JsonObject entry) => (entry.Arr("acl_ops") ?? []).OfType<JsonObject>();
 
-    /// <summary>Entries the log page offers "Undo…" for (audit.html: acl_ops in the current format).</summary>
+    /// <summary>Entries the log page offers "Undo…" for (acl_ops in the current format).</summary>
     static List<string> UndoIds(AuditView a) =>
         a.Entries.Where(e => e.Arr("acl_ops") is { Count: > 0 } ops && ops[0].Has("protected_before")).Select(e => e.Str("id")!).ToList();
 
-    /// <summary>Provider with hooks before a write (monkeypatch in the Python tests); a hook may throw.</summary>
+    /// <summary>Provider with hooks before a write; a hook may throw.</summary>
     sealed class Hooked(IProvider inner) : IProvider
     {
         public Action<string>? BeforeCreate { get; set; }
@@ -107,13 +105,6 @@ public sealed class AclAppTests : TestBase
         }
     }
 
-    [Fact(Skip = "No HTTP in the native app (port-spec X-1): the token cookie and the CSRF token protected the local web "
-        + "server against other local processes and web pages. The Blazor UI calls Session in-process; there is no "
-        + "endpoint to sign in to or to forge a request against.")]
-    public void RequiresTokenAndCsrf()
-    {
-    }
-
     [Fact]
     public void MatrixHasGroupsAsColumnsAndListEntries()
     {
@@ -122,8 +113,8 @@ public sealed class AclAppTests : TestBase
         var names = m.Columns.Select(p => p.Short).ToList();
         Assert.Contains("G-Sales-Lead", names);
         Assert.Contains("P-Payroll", names);
-        Assert.Contains(AllCells(m), c => c.Display().Text == "R|"); // ">R|</button>" in page
-        // "SYSTEM" not in page
+        Assert.Contains(AllCells(m), c => c.Display().Text == "R|");
+        // SYSTEM is hidden: no column, not named in a tip
         Assert.DoesNotContain(m.Columns, p => p.Name.Contains("SYSTEM") || M.Hidden.Contains(p.Sid));
         Assert.DoesNotContain(AllCells(m), c => c.Tip.Contains("SYSTEM"));
     }
@@ -171,10 +162,9 @@ public sealed class AclAppTests : TestBase
     }
 
     [Fact]
-    public void CellResponseUpdatesThePanelOutOfBand()
+    public void SettingACellUpdatesMatrixAndPanel()
     {
-        // Python: the POST /cell response carried the panel too (id="panel" hx-swap-oob="true"). Natively, SetCell
-        // raises State.Changed and the UI renders the matrix and the open panel again from the same state.
+        // SetCell raises State.Changed, and the UI renders the matrix and the open panel again from the same state.
         var (st, s) = Client(new DemoProvider());
         var changed = 0;
         st.Changed += () => changed++;
@@ -397,7 +387,7 @@ public sealed class AclAppTests : TestBase
         var (_, s) = Client(new SimProvider(sim));
         var path = $@"{OPS}\Sales-Lead";
         var panel = s.FolderPanel(path);
-        Assert.True(panel.CanClear && !panel.Clearing); // ">Clear</button>"
+        Assert.True(panel.CanClear && !panel.Clearing); // the panel offers "Clear"
         s.ClearFolder(path);
         panel = s.FolderPanel(path);
         Assert.True(panel.Clearing); // "Clear (pending)" and "Undo clear"
@@ -493,12 +483,12 @@ public sealed class AclAppTests : TestBase
     {
         var sim = SimDir();
         var (_, s) = Client(new SimProvider(sim));
-        s.NewFolder("HR", "Protokolle");
-        s.SetCell(G("G-Management"), @"HR\Protokolle", "R");
-        Assert.Equal([@"HR\Protokolle"], s.Preview().Plan!.CreateOps); // "New folders" in the preview
+        s.NewFolder("HR", "Minutes");
+        s.SetCell(G("G-Management"), @"HR\Minutes", "R");
+        Assert.Equal([@"HR\Minutes"], s.Preview().Plan!.CreateOps); // "New folders" in the preview
         Apply(s);
-        Assert.True(Directory.Exists(Path.Combine(sim, "share", "HR", "Protokolle")));
-        Assert.True(HasAce(Acl(sim, @"HR\Protokolle"), 0, 3, 0x1200A9, G("G-Management")));
+        Assert.True(Directory.Exists(Path.Combine(sim, "share", "HR", "Minutes")));
+        Assert.True(HasAce(Acl(sim, @"HR\Minutes"), 0, 3, 0x1200A9, G("G-Management")));
         Assert.True(HasAce(Acl(sim, "HR"), 0, 0, 0x1200A9, G("G-Management"))); // automatic R|
     }
 
@@ -507,15 +497,15 @@ public sealed class AclAppTests : TestBase
     {
         var sim = SimDir();
         var (st, s) = Client(new SimProvider(sim));
-        s.NewFolder("HR", "Protokolle");
+        s.NewFolder("HR", "Minutes");
         Assert.Contains("changes applied", Apply(s).Message);
         var entry = st.Audit.Entries()[0];
-        Assert.Equal([@"HR\Protokolle"], (entry.Arr("create_ops") ?? []).Select(n => (string)n!));
+        Assert.Equal([@"HR\Minutes"], (entry.Arr("create_ops") ?? []).Select(n => (string)n!));
         var audit = s.AuditPage();
         Assert.Contains(audit.Entries, e => e.Str("id") == entry.Str("id")); // "folder created" (create_ops shown)
         Assert.DoesNotContain(entry.Str("id")!, UndoIds(audit)); // no /undo/<id> button
         s.Undo(entry.Str("id")!); // even by hand, undo removes no folder
-        Assert.True(Directory.Exists(Path.Combine(sim, "share", "HR", "Protokolle")));
+        Assert.True(Directory.Exists(Path.Combine(sim, "share", "HR", "Minutes")));
     }
 
     [Fact]
@@ -635,16 +625,9 @@ public sealed class AclAppTests : TestBase
         Refused(() => s.CellPanel("S-1-5-21-0-0-0-1", "HR"), 404);
     }
 
-    [Fact(Skip = "No HTTP in the native app: matrix.js was a static file served by the web server and linked from the "
-        + "matrix page. The keyboard handling (port-spec F-E3) moves into the Blazor matrix component and is tested "
-        + "with the UI.")]
-    public void KeyboardScriptIsServed()
-    {
-    }
-
-    /// <summary>Python checked the text of every rendered page. Here: the user-facing strings Session, Labels, the
-    /// rights computation and the progress produce in a typical flow (cell tips, panel texts, findings, via, plan
-    /// errors, flash messages, refusals, progress phases). The Razor templates get their own check in the UI tests.</summary>
+    /// <summary>The user-facing strings Session, Labels, the rights computation and the progress produce in a typical
+    /// flow (cell tips, panel texts, findings, via, plan errors, flash messages, refusals, progress phases). The Razor
+    /// pages are checked by RazorTextsTests.</summary>
     [Fact]
     public void UiIsEnglish()
     {

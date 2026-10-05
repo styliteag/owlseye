@@ -1,4 +1,4 @@
-// Shared test helpers (conftest.py in the Python version).
+// Shared test helpers.
 
 [assembly: CollectionBehavior(DisableTestParallelization = true)] // Paths.DataDirOverride is process-wide
 
@@ -16,10 +16,10 @@ public abstract class TestBase : IDisposable
         Paths.DataDirOverride = AppData;
     }
 
-    /// <summary>tmp_path</summary>
+    /// <summary>This test's own temp folder.</summary>
     protected string Tmp { get; }
 
-    /// <summary>The data dir (appdata fixture): Tmp\owlseye.</summary>
+    /// <summary>The data dir: Tmp\owlseye.</summary>
     protected string AppData { get; }
 
     public void Dispose()

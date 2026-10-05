@@ -1,5 +1,5 @@
-// The Razor pages of the app are English (test_ui_is_english rendered the Jinja templates; here the .razor sources
-// are checked, the texts built in Session/Labels are covered by AclAppTests.UiIsEnglish).
+// The Razor pages of the app are English: the .razor sources are checked here, the texts built in Session/Labels by
+// AclAppTests.UiIsEnglish.
 
 using System.Text.RegularExpressions;
 

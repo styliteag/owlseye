@@ -1,4 +1,3 @@
-// Port of backend/tests/test_desired.py.
 // Desired state (baseline) in the ACL model and reconciliation: accept or discard outside changes.
 
 using System.Text.Json.Nodes;
@@ -110,7 +109,7 @@ public sealed class DesiredTests : TestBase
 
     // --- Abgleich ---------------------------------------------------------------------------------
 
-    /// <summary>sim_dir fixture (created lazily: the file tests above do not need it)</summary>
+    /// <summary>A seeded sim directory (created lazily: the file tests above do not need it).</summary>
     string SimDir => simDir ??= SimSeed.Seed(Path.Combine(Tmp, "sim"));
 
     string? simDir;
@@ -186,7 +185,7 @@ public sealed class DesiredTests : TestBase
         Assert.Equal(new Dictionary<string, bool> { [@"Weg\Unter"] = true }, r.Folders);
     }
 
-    /// <summary>create_app(Config(provider="sim", audit=tmp_path/"a.jsonl"), SimProvider(sim_dir), "tok") + TestClient.</summary>
+    /// <summary>State on the sim with the log in the temp folder, first scan done, and a Session on it.</summary>
     static Session Client(string simDir, string tmp)
     {
         var st = new State(new Config { Provider = "sim", Audit = Path.Combine(tmp, "a.jsonl") }, new SimProvider(simDir));
@@ -212,9 +211,9 @@ public sealed class DesiredTests : TestBase
         Edit(SimDir, s => Aces(s, "HR").Add(Ace(Gsid("G-Management"))));
         c.Rescan();
         var page = c.DriftPage();
-        Assert.Contains(page.Items, d => d.Change == "added"); // assert "entry added" in page
+        Assert.Contains(page.Items, d => d.Change == "added"); // shown as "entry added"
         var keys = DriftKeys(page);
-        var o = c.DriftRevert(keys); // follow_redirects -> /preview
+        var o = c.DriftRevert(keys); // leads to the preview
         Assert.Equal("/preview", o.Url);
         var p = c.Preview();
         // assert "Preview" in p and "G-Management" in p
@@ -234,7 +233,7 @@ public sealed class DesiredTests : TestBase
         Edit(SimDir, s => s["acls"]!.AsObject().Remove(path)); // deleted as in Explorer
         c.Rescan();
         var page = c.DriftPage();
-        // assert "folder missing" in page and "recreates it" in page (both rendered for a folder_gone row)
+        // the page shows a folder_gone row as "folder missing" and "recreates it"
         Assert.Equal("", page.BaselineError);
         Assert.Contains(page.Items, d => d.Change == "folder_gone");
         var keys = DriftKeys(page);
@@ -269,7 +268,7 @@ public sealed class DesiredTests : TestBase
     {
         var c = Client(SimDir, Tmp);
         var page = c.DriftPage();
-        // assert str(appdata / file_name(SHARE)) in page and "last written" in page
+        // the page names the file and when it was last written
         Assert.Equal(Path.Combine(AppData, BaselineStore.FileName(SHARE)), page.Info.Path);
         Assert.True(page.Info.Exists && !page.Info.Legacy && page.Info.Updated != ""); // renders "last written {updated} by {by}"
         Edit(SimDir, s => Aces(s, "HR").Add(Ace(Gsid("G-Management"))));
@@ -280,7 +279,7 @@ public sealed class DesiredTests : TestBase
         Assert.Empty(c.St.Drift); // actual is now desired
         var kinds = Kinds(c);
         Assert.Equal(["baseline_init", "baseline_reset"], kinds.Take(2).ToList());
-        // assert "Desired state deleted" in c.get("/audit").text (rendered for a baseline_reset entry)
+        // the log shows a baseline_reset entry as "Desired state deleted"
         Assert.Contains(c.AuditPage().Entries, e => e.Str("kind") == "baseline_reset");
     }
 
@@ -290,7 +289,7 @@ public sealed class DesiredTests : TestBase
         Directory.CreateDirectory(AppData);
         File.WriteAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE)), "{broken");
         var c = Client(SimDir, Tmp);
-        Assert.NotEqual("", c.DriftPage().BaselineError); // assert "cannot be read" in c.get("/drift").text
+        Assert.NotEqual("", c.DriftPage().BaselineError); // the drift page says the file cannot be read
         c.DriftReset("");
         Assert.Equal("", c.St.BaselineError);
         Assert.NotEmpty(JsonNode.Parse(File.ReadAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE))))!["cells"]!.AsArray());
@@ -302,7 +301,7 @@ public sealed class DesiredTests : TestBase
         Directory.CreateDirectory(AppData);
         File.WriteAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE)), "{broken");
         var c = Client(SimDir, Tmp);
-        Assert.NotEqual("", c.DriftPage().BaselineError); // assert "cannot be read" in c.get("/drift").text
+        Assert.NotEqual("", c.DriftPage().BaselineError); // the drift page says the file cannot be read
         Assert.Equal("{broken", File.ReadAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE))));
     }
 
@@ -335,7 +334,7 @@ public sealed class DesiredTests : TestBase
         AddEntry(SimDir, "HR");
         var c = Client(SimDir, Tmp); // restart
         Assert.Single(DriftKeys(c));
-        Assert.True(c.Matrix().DriftCount > 0); // assert "made outside owlseye" in c.get("/matrix").text
+        Assert.True(c.Matrix().DriftCount > 0); // the matrix points to the outside changes
     }
 
     [Fact]
@@ -381,10 +380,8 @@ public sealed class DesiredTests : TestBase
     {
         Client(SimDir, Tmp); // admin A records the desired state
         AddEntry(SimDir, "HR"); // then an outside change
-        // Python monkeypatches BaselineStore.load so that admin B's first read returns None ("started at the same time and
-        // first read no desired state") and the next one the real file. BaselineStore is sealed here, so the same
-        // interleaving for real: A's file is not there when B first reads it and appears while B waits for the
-        // desired-state lock (A still writing); B's read under the lock then sees it.
+        // Admin B starts at the same time as A: A's file is not there when B first reads it and appears while B waits
+        // for the desired-state lock (A still writing); B's read under the lock then sees it.
         var file = Path.Combine(AppData, BaselineStore.FileName(SHARE));
         var aside = file + ".aside";
         File.Move(file, aside);
@@ -441,7 +438,7 @@ public sealed class DesiredTests : TestBase
         Edit(SimDir, s => s["acls"]![path]!["protected"] = true);
         c.Rescan();
         var page = c.DriftPage();
-        Assert.Contains(page.Items, d => d.Change == "broken"); // assert "inheritance broken" in page
+        Assert.Contains(page.Items, d => d.Change == "broken"); // shown as "inheritance broken"
         Assert.Equal("/preview", c.DriftRevert(DriftKeys(page)).Url);
         var p = c.Preview();
         // assert "restore inheritance" in p (an op that is not a clear and turns inheritance back on)
@@ -462,7 +459,7 @@ public sealed class DesiredTests : TestBase
         Assert.Empty(c.St.Drift);
         var saved = JsonNode.Parse(File.ReadAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE))))!;
         Assert.Contains(path, saved["protected"]!.AsArray().Select(x => (string)x!));
-        // assert "inheritance broken" in c.get("/audit").text (rendered for a kept "broken" item of a drift_accept entry)
+        // the log shows the kept "broken" item as "inheritance broken"
         Assert.Contains(c.AuditPage().Entries, e => e.Str("kind") == "drift_accept"
             && (e.Arr("accepted") ?? []).Any(d => d.Str("change") == "broken"));
     }

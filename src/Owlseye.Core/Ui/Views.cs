@@ -1,16 +1,16 @@
-// View models for the pages and panels (what the Jinja templates got as context in the Python version).
+// View models for the pages and panels: what the Razor components render.
 
 using System.Text.Json.Nodes;
 
 namespace Owlseye.Ui;
 
-/// <summary>An error to show to the admin (HTTP 400/404 in the Python version).</summary>
+/// <summary>An error to show to the admin. Status 404: what was asked for does not exist; 400: anything else.</summary>
 public sealed class UserError(string message, int status = 400) : Exception(message)
 {
     public int Status { get; } = status;
 }
 
-/// <summary>Where to go after an action, with a flash message (a redirect with ?msg= in the Python version).</summary>
+/// <summary>Where to go after an action, with a flash message.</summary>
 public sealed record Outcome(string Url, string? Message = null, bool Error = false);
 
 public static class Labels

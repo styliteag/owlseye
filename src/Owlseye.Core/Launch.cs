@@ -1,4 +1,4 @@
-// Start rules (__main__.py in the Python version), platform-neutral so tests can check them:
+// Start rules, platform-neutral so tests can check them:
 // config + mode -> provider -> state, first scan in the background.
 //
 // Provider: --demo/--sim/--local > "provider" in config.json (from --config, else next to the exe) > the default the

@@ -11,7 +11,7 @@ public sealed class State
 {
     public static readonly IReadOnlyList<int> Depths = Enumerable.Range(1, 10).ToList(); // selectable matrix depths
 
-    /// <summary>Reentrant (Monitor), like the Python RLock.</summary>
+    /// <summary>Reentrant (Monitor).</summary>
     public readonly object Lock = new();
     readonly object loadLock = new(); // not Lock: the scan holds that until it is done
 

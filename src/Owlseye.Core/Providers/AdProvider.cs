@@ -158,7 +158,7 @@ public class AdProvider : IProvider
     void CheckFolder(string rel)
     {
         if (rel != "" && rel.Split('\\').Any(M.BadComponent))
-            throw new UnauthorizedAccessException($"Invalid folder path: {Py.Repr(rel)}");
+            throw new UnauthorizedAccessException($"Invalid folder path: {Msg.Quote(rel)}");
         if (scanDepth > 0 && M.LevelOf(rel) > scanDepth)
             throw new UnauthorizedAccessException($"{rel} is below the scanned depth ({scanDepth})");
     }
@@ -176,7 +176,7 @@ public class AdProvider : IProvider
     {
         var parts = path.Split('\\');
         if (parts.Any(M.BadComponent) || M.BadFolderName(parts[^1]))
-            throw new UnauthorizedAccessException($"Invalid new folder: {Py.Repr(path)}");
+            throw new UnauthorizedAccessException($"Invalid new folder: {Msg.Quote(path)}");
         CheckFolder(path);
         var parent = string.Join("\\", parts[..^1]);
         if (parent != "" && !Fs.Exists(parent)) throw new UnauthorizedAccessException($"{parent} does not exist");

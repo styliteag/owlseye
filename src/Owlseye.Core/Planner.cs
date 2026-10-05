@@ -82,7 +82,7 @@ public static class Planner
                 continue;
             }
             if (f is null || !snap.Folders.ContainsKey(path) || !Acl.CanToggle(f))
-                throw new PlanError($"Inheritance can only be changed on existing folders below the root: {Py.Repr(path)}");
+                throw new PlanError($"Inheritance can only be changed on existing folders below the root: {Msg.Quote(path)}");
             if (f.OtherAces)
                 throw new PlanError($"{path} has ACL entries of other types (e.g. conditional); owlseye does not rewrite it");
             if (f.Protected == protect) continue;
@@ -169,7 +169,7 @@ public static class Planner
         foreach (var path in clear)
         {
             if (!snap.Folders.TryGetValue(path, out var f) || !Acl.CanToggle(f))
-                throw new PlanError($"Only existing folders below the root can be cleared: {Py.Repr(path)}");
+                throw new PlanError($"Only existing folders below the root can be cleared: {Msg.Quote(path)}");
             if (f.OtherAces)
                 throw new PlanError($"{path} has ACL entries of other types or cannot be read; owlseye does not rewrite it");
             folders.Remove(path);
@@ -193,7 +193,7 @@ public static class Planner
                 throw new PlanError("SYSTEM, Administrators, Creator Owner, Domain Admins and the accounts hidden in "
                     + "config.json are not set in the matrix");
             if (!principals.ContainsKey(sid)) throw new PlanError($"Unknown account {sid}");
-            if (!work.Folders.TryGetValue(path, out var f)) throw new PlanError($"Unknown folder {Py.Repr(path)}");
+            if (!work.Folders.TryGetValue(path, out var f)) throw new PlanError($"Unknown folder {Msg.Quote(path)}");
             if (v is not null && !M.Cells.Contains(v)) throw new PlanError($"Right must be one of {string.Join(", ", M.Cells)} or empty");
             if (v is not null && principals[sid].Kind == "unknown")
                 throw new PlanError($"{principals[sid].Name} cannot be resolved (deleted or foreign account?); owlseye does not give it rights");
@@ -227,7 +227,7 @@ public static class Planner
         {
             if (path != "" && path.Split('\\').Any(M.BadComponent)) // already in the preview, not only when writing
                 throw new PlanError(
-                    $"owlseye does not write ACLs on {Py.Repr(path)} (name ends with a dot or space, or has control characters)");
+                    $"owlseye does not write ACLs on {Msg.Quote(path)} (name ends with a dot or space, or has control characters)");
             var f0 = snap.Folders.GetValueOrDefault(path);
             var f1 = final.Folders[path];
             IReadOnlyList<Ace> b = f0 is not null ? f0.Explicit : [];

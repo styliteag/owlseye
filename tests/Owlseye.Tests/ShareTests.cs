@@ -1,4 +1,3 @@
-// Port of backend/tests/test_share.py.
 // Choosing the share in the UI and opening the last one at the next start.
 
 using System.Text.Json.Nodes;
@@ -12,7 +11,7 @@ public sealed class ShareTests : TestBase
     const string Other = @"\\fs02\Other";
     const string First = @"\\fs01\Data";
 
-    /// <summary>two fixture: two sim directories, the second one with share \\fs02\Other.</summary>
+    /// <summary>Two sim directories, the second one with share \\fs02\Other.</summary>
     (string A, string B) Two()
     {
         var a = SimSeed.Seed(Path.Combine(Tmp, "a"));
@@ -24,7 +23,7 @@ public sealed class ShareTests : TestBase
         return (a, b);
     }
 
-    /// <summary>open_share=SimProvider: the class as factory.</summary>
+    /// <summary>Opens a path as a sim share.</summary>
     static IProvider OpenSim(string path) => new SimProvider(path);
 
     (State St, Session S) Client(IProvider provider, Func<string, IProvider>? openShare = null)
@@ -170,7 +169,7 @@ public sealed class ShareTests : TestBase
     [Fact]
     public void StartWithoutAnyShareSaysWhatToDo()
     {
-        // Python exits with "No share yet: start once with --local PATH"; the window says it and offers to open one
+        // the window says what to do and offers to open a folder
         var st = RunMain(null);
         Assert.False(st.Ready);
         Assert.Contains("--local PATH", st.LoadError);

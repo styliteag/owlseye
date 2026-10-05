@@ -87,7 +87,7 @@ public static class Create
         {
             var name = path[(path.LastIndexOf('\\') + 1)..];
             if ((parent != "" ? parent + "\\" + name : name) != path || M.BadFolderName(name))
-                throw new ArgumentException($"Invalid folder name: {Py.Repr(name)}");
+                throw new ArgumentException($"Invalid folder name: {Msg.Quote(name)}");
             if (existing.Contains(M.Lower(path))) throw new ArgumentException($"{path} already exists");
             if (M.LevelOf(path) > maxLevel) throw new ArgumentException($"New folders can only be created down to level {maxLevel}");
             if (!existing.Contains(M.Lower(parent)) && !planned.Contains(M.Lower(parent)))
@@ -97,11 +97,12 @@ public static class Create
     }
 }
 
-/// <summary>Small helpers that mimic Python formatting in messages.</summary>
-public static class Py
+/// <summary>Formatting of names in messages.</summary>
+public static class Msg
 {
-    /// <summary>Like Python's repr() of a str: single quotes unless the string contains one and no double quote.</summary>
-    public static string Repr(string s)
+    /// <summary>A name in quotes, with control characters escaped: single quotes unless the name contains one and no
+    /// double quote.</summary>
+    public static string Quote(string s)
     {
         var q = s.Contains('\'') && !s.Contains('"') ? '"' : '\'';
         var sb = new System.Text.StringBuilder().Append(q);

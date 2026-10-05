@@ -52,7 +52,7 @@ public sealed record Options(string? Mode, string? Path, string? Config, bool Se
         if (seed) return string.IsNullOrEmpty(seedPath)
             ? new Options(null, null, null, false, "usage: owlseye seed-local E:\\Share")
             : new Options(null, seedPath, config, true, null, force);
-        // as in the Python version: demo > sim > local, whatever the order on the command line
+        // demo > sim > local, whatever the order on the command line
         var mode = demo ? "demo" : sim is not null ? "sim" : local is not null ? "local" : null;
         var path = mode switch { "sim" => sim, "local" => local, _ => null };
         return new Options(mode, path, config, false, null);

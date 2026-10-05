@@ -1,6 +1,5 @@
 // Names with umlauts, spaces, special characters and emoji: folders, groups, users, share, audit log.
-// Port of backend/tests/test_names.py. The FastAPI TestClient calls become calls on Owlseye.Ui.Session; a route that
-// answered 200 is a Session call that did not throw, a 400 is a UserError with Status 400.
+// Through Session: a call that does not throw worked, a refused one is a UserError with Status 400.
 
 using System.Text;
 using System.Text.Encodings.Web;
@@ -34,7 +33,7 @@ public class NamesTests : TestBase
 
     public static TheoryData<string> Folders => [.. FolderNames];
 
-    /// <summary>sim_dir fixture: seeded sim with the special folders, the group and the user.</summary>
+    /// <summary>A seeded sim with the special folders, the group and the user.</summary>
     string SimDir()
     {
         var d = SimSeed.Seed(Path.Combine(Tmp, "sim"));
@@ -65,7 +64,7 @@ public class NamesTests : TestBase
         return d;
     }
 
-    /// <summary>create_app(cfg, SimProvider(sim_dir), token): the first scan is done when it returns.</summary>
+    /// <summary>State on the sim and a Session; the first scan is done when it returns.</summary>
     Session Client(string simDir)
     {
         var cfg = new Config { Provider = "sim", Audit = Path.Combine(Tmp, "a.jsonl"), Baseline = Path.Combine(Tmp, "base") };
@@ -75,7 +74,7 @@ public class NamesTests : TestBase
         return new Session(st);
     }
 
-    /// <summary>GET /preview for the phash, then POST /apply.</summary>
+    /// <summary>Preview for the plan hash, then Apply.</summary>
     static Outcome Apply(Session c, string reason = "") => c.Apply(reason, c.Preview().Phash);
 
     /// <summary>acls[path]["aces"] of the sim's state.json as (type, flags, mask, sid).</summary>
@@ -101,22 +100,21 @@ public class NamesTests : TestBase
         var simDir = SimDir();
         var c = Client(simDir);
         var path = $"Public\\{name}";
-        Assert.NotNull(c.FolderPanel(path)); // GET /panel/folder: 200
-        Assert.NotNull(c.CellPanel(Demo.Gsid("G-HR"), path)); // GET /panel/cell: 200
-        c.SetCell(Demo.Gsid("G-HR"), path, "W"); // POST /cell: 200 (a UserError would be the 400)
+        Assert.NotNull(c.FolderPanel(path));
+        Assert.NotNull(c.CellPanel(Demo.Gsid("G-HR"), path));
+        c.SetCell(Demo.Gsid("G-HR"), path, "W");
         Assert.Contains(c.Matrix().Rows, r => r.Folder.Name == "Geschäftsführung"); // UTF-8 arrives unchanged
         var r = Apply(c);
         Assert.Contains("changes applied", r.Message);
         Assert.Contains((0L, 3L, (long)M.Modify, Demo.Gsid("G-HR")), AcesOf(simDir, path));
-        Assert.NotNull(c.FolderPage(path)); // GET /folder: 200
+        Assert.NotNull(c.FolderPage(path));
     }
 
     [Fact]
     public void HtmlSpecialCharactersAreEscaped()
     {
         var m = Client(SimDir()).Matrix();
-        // UI: Razor escapes output (the Python test checked ">Projekte &amp; Co<" in the rendered page). Here: the name
-        // reaches the view model unchanged, so the escaping is left to the renderer.
+        // The name reaches the view model unchanged; Razor escapes it when rendering.
         Assert.Contains(m.Rows, r => r.Folder.Name == "Projekte & Co");
         Assert.DoesNotContain(m.Rows, r => r.Folder.Name == "Projekte &amp; Co");
     }
@@ -127,7 +125,7 @@ public class NamesTests : TestBase
         var simDir = SimDir();
         var c = Client(simDir);
         foreach (var name in new[] { "Neue Übersicht", "Ärger; 2025", "Straße 12" })
-            Assert.Equal("Public\\" + name, c.NewFolder("Public", name)); // POST /folder/new: 200
+            Assert.Equal("Public\\" + name, c.NewFolder("Public", name));
         foreach (var bad in new[] { "Ende.", "a/b", "x:y", "CON", "Tab\there" })
         {
             var e = Assert.Throws<UserError>(() => c.NewFolder("Public", bad));
@@ -144,7 +142,7 @@ public class NamesTests : TestBase
     {
         var simDir = SimDir();
         var c = Client(simDir);
-        var page = c.Groups("G-Gesch"); // GET /panel/groups: the template shows h.name
+        var page = c.Groups("G-Gesch");
         Assert.Contains(page.Hits, h => h.Name.Contains(GroupName, StringComparison.Ordinal));
         c.AddColumn(GroupSid, "G-Gesch");
         Assert.Contains(c.Matrix().Columns, p => p.Short == GroupName); // f">{GROUP}<": the column header shows p.short
@@ -157,7 +155,7 @@ public class NamesTests : TestBase
         Assert.Equal(($"DEMO\\{GroupName}", GroupDn), (p.Name, p.Dn));
         Assert.Equal([UserDn], Rights.MembersOf(s, GroupSid)!); // DN with escaped comma resolved
         Assert.Equal("R", Rights.UserRights(s)[UserDn]["HR"]);
-        var users = c.Users(u: UserDn); // GET /users?u=...
+        var users = c.Users(u: UserDn);
         Assert.Equal("Jürgen Müller", users.Selected?.Display); // users.html: header of the selected user
         Assert.Contains(users.Detail, d => d.Via.Any(v => v.Contains(GroupName, StringComparison.Ordinal))); // "via" column
     }
@@ -210,7 +208,7 @@ public class NamesTests : TestBase
         Assert.Equal(path, plan.AclOps.Select(o => o.Path).ToList()[^1]);
     }
 
-    /// <summary>Python compared the Desired dataclasses with ==.</summary>
+    /// <summary>Same cells, names and protected folders.</summary>
     static void AssertSameDesired(Desired expected, Desired? actual)
     {
         Assert.NotNull(actual);

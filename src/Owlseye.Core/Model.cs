@@ -181,10 +181,10 @@ public static class M
 
     public static string Lower(string s) => s.ToLowerInvariant();
 
-    /// <summary>Ordinal comparison of lowercased strings, like Python's sorted(key=str.lower).</summary>
+    /// <summary>Ordinal comparison, used on lowercased strings (M.Lower).</summary>
     public static readonly StringComparer Ci = StringComparer.Ordinal;
 
-    /// <summary>Tree order: compares the lowercased path components like Python lists.</summary>
+    /// <summary>Tree order: compares the lowercased path components one by one; a parent comes before its children.</summary>
     public static int TreeCompare(string a, string b)
     {
         var pa = a.Split('\\');
@@ -252,6 +252,6 @@ public sealed record Snapshot(
 
 public static class Clock
 {
-    /// <summary>Like Python's datetime.now(UTC).isoformat(timespec="seconds").</summary>
+    /// <summary>Now in UTC, to the second, as in the log and the desired state: 2026-10-05T17:05:41+00:00.</summary>
     public static string Now() => DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture) + "+00:00";
 }

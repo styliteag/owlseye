@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 
 namespace Owlseye;
 
-/// <summary>JSON as the Python version writes it: snake_case keys, UTF-8 without escaping non-ASCII,
+/// <summary>owlseye's JSON files: snake_case keys, UTF-8 without escaping non-ASCII,
 /// files with indent 1, written atomically.</summary>
 public static class Json
 {
@@ -83,7 +83,7 @@ public static class Json
 
     public static bool Has(this JsonNode? n, string key) => n is JsonObject o && o.ContainsKey(key);
 
-    /// <summary>Python truthiness of a JSON value (for templates that test `e.reason or '–'`).</summary>
+    /// <summary>Whether a JSON value counts as set: not null, false, 0, "" or an empty array or object.</summary>
     public static bool Truthy(JsonNode? v) => v switch
     {
         null => false,
@@ -98,8 +98,8 @@ public static class Json
 
 #pragma warning disable CA1416 // FileStream.Lock: not on macOS; caught below (PlatformNotSupportedException)
 
-/// <summary>Lock on byte 0 of an open file, like msvcrt.locking in the Python version (both exclude each other).
-/// Retries for about 10 seconds like LK_LOCK.</summary>
+/// <summary>Lock on byte 0 of an open file, so two owlseye processes do not write the same file at once.
+/// Retries for about 10 seconds.</summary>
 public sealed class FileLock : IDisposable
 {
     readonly FileStream fs;

@@ -1,4 +1,4 @@
-// Access rights report (beyond the Python version): content built from the scan, and the Excel workbook.
+// Access rights report: content built from the scan, and the Excel workbook.
 
 using System.IO.Compression;
 using System.Xml.Linq;

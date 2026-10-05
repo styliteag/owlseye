@@ -261,7 +261,7 @@ public static class Rights
                 if (!direct.TryGetValue(m, out var l)) direct[m] = l = [];
                 l.Add(gdn);
             }
-        // A walk per member, without memo: the Python version memoized results that a cycle had cut short (A in B, B in A),
+        // A walk per member, without memo: a memo would keep results that a cycle had cut short (A in B, B in A),
         // so members of A lost B. Nesting is shallow, so walking it for every member is cheap.
         var o = new Dictionary<string, HashSet<string>>();
         foreach (var (p, groups) in direct)
