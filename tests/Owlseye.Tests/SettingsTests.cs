@@ -78,6 +78,24 @@ public sealed class SettingsTests : TestBase, IDisposable
     }
 
     [Fact]
+    public void OnlyScanDepthAndHiddenAccountsReadTheShareAgain()
+    {
+        var (st, s) = Client();
+        var snap = st.Snap;
+        var r = s.SaveSettings(new SettingsInput(st.Cfg.ScanDepth, "no-delete", [], ["SYSTEM", "Domain Admins"], ""), "");
+        Assert.False(r.Error, r.Message);
+        Assert.Same(snap, st.Snap); // W and full control: worked out from the last scan
+        Assert.Contains(st.Findings, f => f.Path == "HR" && f.Text == "Domain Admins without full control here");
+        s.SetCell(Demo.Gsid("G-IT"), "HR", "W");
+        var after = s.Preview().Plan!.AclOps.Single(o => o.Path == "HR").After;
+        Assert.Contains(after, a => a.Sid == Demo.Gsid("G-IT") && a.Mask == M.WriteNoDelete);
+        s.Discard();
+        Assert.False(s.SaveSettings(new SettingsInput(st.Cfg.ScanDepth, "no-delete", ["DEMO\\G-IT"], ["SYSTEM", "Domain Admins"], ""), "").Error);
+        Assert.NotSame(snap, st.Snap); // the scan leaves hidden accounts out
+        Assert.DoesNotContain(s.Matrix().Columns, c => c.Short == "G-IT");
+    }
+
+    [Fact]
     public void SavingWaitsForPendingChangesAndChecksValues()
     {
         var (_, s) = Client();

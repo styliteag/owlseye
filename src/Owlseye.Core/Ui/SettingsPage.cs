@@ -52,7 +52,7 @@ public sealed partial class Session
         {
             var c = St.Cfg;
             var (target, blocked) = SaveTarget();
-            var reason = blocked ?? (St.PendingCount > 0 ? "Apply or discard the pending changes first: saving rescans the share." : null);
+            var reason = blocked ?? (St.PendingCount > 0 ? "Apply or discard the pending changes first: saving works the rights out anew." : null);
             return new SettingsView(c.File, target, reason is null, reason, c.ScanDepth, c.Write, c.Hidden, c.FullControl,
                 St.Ready ? Rights.RequiredFullControl(St.Snap) : [], c.State, c.StateDir, c.AuditPath, c.BaselineDir, c.Provider,
                 c.SharedFile, File.Exists(c.SharedFile));
@@ -103,8 +103,9 @@ public sealed partial class Session
     static List<string> Clean(IEnumerable<string> xs) =>
         xs.SelectMany(x => x.Split('\n')).Select(x => x.Trim()).Where(x => x != "").Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-    /// <summary>Saves the settings to config.json, applies them (hidden accounts, W, full control at once; the scan
-    /// depth with a new scan; log and desired-state folders after a restart) and logs old and new values.</summary>
+    /// <summary>Saves the settings (shared ones to the state folder, where that is to config.json), applies them at
+    /// once and logs old and new values. Only a new scan depth or other hidden accounts read the share again; W, full
+    /// control and the state folder are worked out from the last scan.</summary>
     public Outcome SaveSettings(SettingsInput input, string reason)
     {
         string message;
@@ -112,7 +113,7 @@ public sealed partial class Session
         {
             var (target, blocked) = SaveTarget();
             if (blocked is not null) return new Outcome("/settings", blocked, true);
-            if (St.PendingCount > 0) return new Outcome("/settings", "Apply or discard the pending changes first: saving rescans the share.", true);
+            if (St.PendingCount > 0) return new Outcome("/settings", "Apply or discard the pending changes first: saving works the rights out anew.", true);
             if (input.ScanDepth is < 0 or > 100) return new Outcome("/settings", "Scan depth must be 0 (whole tree) to 100.", true);
             if (input.Write is not ("modify" or "no-delete")) return new Outcome("/settings", "W must mean \"modify\" or \"no-delete\".", true);
             var old = St.Cfg;
@@ -199,8 +200,10 @@ public sealed partial class Session
             });
             if (changes.ContainsKey("scan_depth") && St.OpenShare is not null && St.Ready)
                 St.Switch(St.OpenShare(St.Provider.Share)); // a provider with the new depth, scanned anew
+            else if (changes.ContainsKey("hidden") || !St.Ready)
+                St.Rescan(); // the scan leaves out hidden accounts (no column, no members read)
             else
-                St.Rescan();
+                St.Rescan(St.Snap); // W, full control and the state folder: worked out again from the last scan
             message = (adopted ? $"Now using the state folder {neu.StateDir} and its settings (those of the admins who use it)."
                     : $"Settings saved to {neu.SharedFile}.")
                 + (changes.ContainsKey("scan_depth") && St.OpenShare is null ? " The scan depth applies at the next start." : "")

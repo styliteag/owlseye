@@ -132,9 +132,10 @@ public sealed class State
     {
         lock (Lock)
         {
-            using (Progress.Task("scan", "Reading folders"))
+            using (Progress.Task("scan", snap is null ? "Reading folders" : "Evaluating the rights"))
             {
                 Snap = snap ?? Provider.Scan(Progress);
+                lastPlan = null; // also for the same snapshot: settings such as W change the plan
                 Progress.Set(phase: "Evaluating the rights", path: "");
                 Cells = Rights.Matrix(Snap);
                 Cache = new RightsCache(Snap, Cells);
