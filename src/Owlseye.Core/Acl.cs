@@ -58,6 +58,16 @@ public static class Acl
         return rest;
     }
 
+    /// <summary>Creator Owner on this folder: "W" Modify or "F" full control for whoever creates a file or folder
+    /// below, or nothing (null). Replaces its own Creator Owner entries.</summary>
+    public static List<Ace> SetCreatorOwner(IEnumerable<Ace> explicitAces, string? value)
+    {
+        var rest = explicitAces.Where(a => a.Sid != M.CreatorOwner).ToList();
+        if (value is not null)
+            rest.Add(new Ace(M.CreatorOwner, @"CREATOR OWNER", "wellknown", value == "F" ? M.Full : M.Modify, Flags: M.CreatorOwnerFlags));
+        return rest;
+    }
+
     /// <summary>The accounts that must have full control (config.json "full_control", by default SYSTEM and
     /// Administrators) with full control on this folder, subfolders and files, where missing. On a folder that inherits
     /// (the share root), full control inherited from above counts.</summary>

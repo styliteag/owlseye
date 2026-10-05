@@ -159,8 +159,16 @@ public sealed record CellPanel(Principal P, Folder F, CellInfo Info, IReadOnlyLi
 
 public sealed record Grant(string Name, string Right, string? Source);
 
+/// <summary>An entry of a hidden account on a folder (SYSTEM, Domain Admins, …), shown in the folder panel.</summary>
+public sealed record HiddenEntry(string Name, string Right, bool Inherited);
+
+/// <param name="CreatorOwner">what Creator Owner gets below this folder from its own entries, pending change included
+/// (F, W, * or null)</param>
+/// <param name="CreatorOwnerInherited">the same from inherited entries</param>
 public sealed record FolderPanel(Folder F, string Share, bool CanAdd, IReadOnlyList<string> NewHere, bool IsNew, bool Protected,
-    bool Pending, bool CanToggle, bool Clearing, bool CanClear, IReadOnlyList<Grant> Grants, IReadOnlyList<Finding> Findings);
+    bool Pending, bool CanToggle, bool Clearing, bool CanClear, IReadOnlyList<Grant> Grants, IReadOnlyList<Finding> Findings,
+    IReadOnlyList<HiddenEntry> Hidden, string? CreatorOwner = null, string? CreatorOwnerInherited = null,
+    bool CreatorOwnerPending = false, bool CanSetCreatorOwner = false);
 
 public sealed record GroupsPanel(string Gq, IReadOnlyList<Principal> Hits, IReadOnlySet<string> Shown, bool HiddenHint);
 

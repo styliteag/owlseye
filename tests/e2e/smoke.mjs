@@ -130,6 +130,13 @@ try {
     await click('.toolbar label.showhidden input');
     await until(`!!document.querySelector('#grid th.gcol') && !document.querySelector('#grid th.gcol.hiddenacct')`, 'hidden columns gone');
   });
+  await step('folder panel lists hidden accounts and sets Creator Owner', async () => {
+    await clickText('#grid button.fname', 'HR');
+    // the headings are upper case by CSS, and innerText returns them so
+    await until(`!!document.querySelector('#panel')?.innerText.toLowerCase().includes('hidden accounts here') && document.querySelector('#panel').innerText.toLowerCase().includes('creator owner')`, 'folder panel');
+    await clickText('#panel .choices button', 'Full control');
+    await until(`!!document.querySelector('#panel')?.innerText.includes('(pending)')`, 'Creator Owner pending');
+  });
   await step('no error boundary was hit', async () => {
     const err = await js(`document.body.innerText.includes('Something went wrong')`);
     if (err) throw new Error('error boundary shown');

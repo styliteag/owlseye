@@ -108,7 +108,10 @@ own account: no service account, no stored password.
 - Break: inherited entries become own entries, so nobody loses access; then remove what should not apply (F-P3).
 - Restore: copies of what the parent passes down are removed (F-P4).
 - Clear: inherits again, all own entries go (also deny and special entries), the automatic R| above too (F-I2, F-P11).
-- On folders with broken inheritance SYSTEM and Administrators always keep full control (F-P9).
+- On the root and on folders with broken inheritance the full-control accounts (by default SYSTEM and Administrators)
+  keep full control (F-P9).
+- The panel lists the hidden accounts on the folder and sets Creator Owner (what whoever creates a file or folder there
+  gets): nothing, Modify or full control; full control is a finding (F-I3, F-I4, F-F1).
 
 ### 2.4 Create subfolders
 

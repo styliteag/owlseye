@@ -147,6 +147,20 @@ public sealed class Win32Tests : IDisposable
         Assert.Equal("W", st.Cells[(Users, @"C\New folder ä")].Direct);
     }
 
+    [Fact]
+    public void CreatorOwnerIsWrittenForSubfoldersAndFilesOnly()
+    {
+        var (_, s) = Client();
+        s.SetCreatorOwner("C", "W");
+        var o = Apply(s);
+        Assert.False(o.Error, o.Message);
+        Assert.Contains(Fs().ReadDacl("C").Aces, a => a.Sid == M.CreatorOwner && a.Mask == M.Modify && a.Flags == M.CreatorOwnerFlags);
+        Assert.Equal("W", s.FolderPanel("C").CreatorOwner);
+        // a folder created below gets the right for its creator, i.e. for the account running the test
+        Directory.CreateDirectory(Path.Combine(share, "C", "Mine"));
+        Assert.Contains(Fs().ReadDacl(@"C\Mine").Aces, a => a.Sid == Me && (a.Mask & M.Modify) == M.Modify && (a.Flags & M.InheritedAce) != 0);
+    }
+
     static void Junction(string link, string target)
     {
         var p = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"") { CreateNoWindow = true, UseShellExecute = false })!;

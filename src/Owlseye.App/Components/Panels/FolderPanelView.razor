@@ -76,6 +76,38 @@ else if (f.Level > 0)
     }
   </table>
 }
+@if (Model.Hidden.Count > 0)
+{
+  <h4>Hidden accounts here</h4>
+  <table class="list small">
+    @foreach (var h in Model.Hidden)
+    {
+      <tr><td>@h.Name</td><td><span class="c @Labels.Css(h.Right)">@h.Right</span></td><td class="muted">@(h.Inherited ? "inherited" : "here")</td></tr>
+    }
+  </table>
+  <p class="muted small">Not matrix columns; "Hidden accounts" above the matrix shows them.</p>
+}
+@if (!Model.IsNew && (Model.CanSetCreatorOwner || Model.CreatorOwner is not null || Model.CreatorOwnerInherited is not null))
+{
+  <h4>Creator Owner</h4>
+  <p class="small">Whoever creates a file or folder in here gets on it:
+    <b>@CoText(Model.CreatorOwner)</b>@(Model.CreatorOwnerPending ? " (pending)" : "")@if (Model.CreatorOwnerInherited is { } inh)
+    {
+      <text>; inherited: </text><b>@CoText(inh)</b>
+    }</p>
+  @if (Model.CanSetCreatorOwner)
+  {
+    <div class="choices">
+      @foreach (var (v, label) in new (string?, string)[] { (null, "Nothing"), ("W", "Modify"), ("F", "Full control") })
+      {
+        var value = v;
+        <button class="@(Model.CreatorOwner == value ? "primary" : "")" @onclick="() => OnCreatorOwner.InvokeAsync(value)">@label</button>
+      }
+    </div>
+    <p class="muted small">Applies to files and subfolders created from now on, not to existing ones. With full control, users can
+      change permissions on what they create and lock others out.</p>
+  }
+}
 @if (Model.Findings.Count > 0)
 {
   <h4>Findings</h4>
@@ -101,6 +133,16 @@ else if (f.Level > 0)
   /// <summary>Adds the new folder; false if it was refused (the name stays in the field).</summary>
   [Parameter] public Func<string, bool>? TryNewFolder { get; set; }
   [Parameter] public EventCallback<string> OnCancelNew { get; set; }
+  /// <summary>Creator Owner: null nothing, "W" Modify, "F" full control.</summary>
+  [Parameter] public EventCallback<string?> OnCreatorOwner { get; set; }
+
+  static string CoText(string? v) => v switch
+  {
+    null => "nothing of its own",
+    "F" => "full control",
+    "W" => "Modify",
+    _ => "special rights",
+  };
 
   string name = "";
   string? forPath;

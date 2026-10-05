@@ -169,6 +169,23 @@ public static class M
     }
 
     /// <summary>Additionally for new folders: no reserved device names (CON, NUL, … also with extension, "CON .txt").</summary>
+    /// <summary>Generic rights (GENERIC_ALL etc., as Windows writes them for Creator Owner) as the file rights they stand for.</summary>
+    public static uint MapGeneric(uint mask)
+    {
+        var m = mask & 0x0FFFFFFF;
+        if ((mask & 0x10000000) != 0) m |= Full; // GENERIC_ALL
+        if ((mask & 0x80000000) != 0) m |= 0x120089; // GENERIC_READ
+        if ((mask & 0x40000000) != 0) m |= 0x120116; // GENERIC_WRITE
+        if ((mask & 0x20000000) != 0) m |= 0x1200A0; // GENERIC_EXECUTE
+        return m;
+    }
+
+    /// <summary>Creator Owner entries owlseye writes: subfolders and files only (whoever creates them gets the right).</summary>
+    public const int CreatorOwnerFlags = ObjectInherit | ContainerInherit | InheritOnly;
+
+    /// <summary>Name of Creator Owner in plans and the log.</summary>
+    public const string CreatorOwnerName = "Creator Owner (new files and folders)";
+
     /// <summary>Longest name owlseye accepts for a new folder.</summary>
     public const int MaxFolderName = 200;
 
