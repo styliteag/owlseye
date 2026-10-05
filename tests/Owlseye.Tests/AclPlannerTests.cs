@@ -314,6 +314,39 @@ public class AclPlannerTests : TestBase
     }
 
     [Fact]
+    public void NewFolderNamesHaveAtMost200Characters()
+    {
+        var name = new string('a', M.MaxFolderName);
+        var plan = Planner.Build(snap, NoCells, newFolders: new Dictionary<string, string> { [$"Public\\{name}"] = "Public" });
+        Assert.Equal([$"Public\\{name}"], plan.CreateOps);
+        var e = Assert.Throws<PlanError>(() =>
+            Planner.Build(snap, NoCells, newFolders: new Dictionary<string, string> { [$"Public\\{name}b"] = "Public" }));
+        Assert.Contains("at most 200 characters", e.Message);
+    }
+
+    [Fact]
+    public void TheRootGetsTheFullControlAccountsUnlessItInheritsThem()
+    {
+        // the root inherits from the drive: SYSTEM with full control from above, Administrators not at all
+        var root = snap.Folders[""];
+        snap.Folders[""] = root with
+        {
+            Protected = false,
+            Aces =
+            [
+                .. root.Explicit.Where(a => !M.IsHidden(a.Sid, a.Name)),
+                new Ace(M.System, @"NT AUTHORITY\SYSTEM", "wellknown", M.Full, Inherited: true, Flags: M.OiCi | M.InheritedAce),
+            ],
+        };
+        var findings = Rights.Findings(snap).Where(f => f.Path == "").Select(f => f.Text).ToList();
+        Assert.Contains("Administrators without full control here", findings);
+        Assert.DoesNotContain(findings, t => t.StartsWith("SYSTEM"));
+        var op = Planner.Build(snap, Ch(Gsid("G-HR"), "", "R|")).AclOps.Single(o => o.Path == "");
+        Assert.Contains(op.After, a => a.Sid == M.Admins && a.Mask == M.Full && a.Flags == M.OiCi);
+        Assert.DoesNotContain(op.After, a => a.Sid == M.System); // inherited already
+    }
+
+    [Fact]
     public void ImpactListsUsers()
     {
         var plan = Planner.Build(snap, Ch(Gsid("G-HR"), @"Programs\ERP", "W"));

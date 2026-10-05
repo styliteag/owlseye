@@ -171,6 +171,10 @@ public static class Rights
         aces.Where(a => (a.Flags & M.InheritOnly) == 0 && (a.Flags & M.OiCi) == M.OiCi)
             .Aggregate(0u, (m, a) => m | a.Mask) is var mask && (mask & M.Full) == M.Full;
 
+    /// <summary>Does the account have full control here through these entries (own or inherited)?</summary>
+    public static bool HasFullControl(IEnumerable<Ace> aces, string sid) =>
+        IsFullControl(aces.Where(a => a.Allow && a.Sid == sid).ToList());
+
     /// <summary>(sid, path) -> explicit entry. Only Allow ACEs, without the hidden accounts (SYSTEM, Administrators, …).</summary>
     public static Dictionary<(string Sid, string Path), Explicit> ExplicitCells(Snapshot snap)
     {
@@ -376,7 +380,7 @@ public static class Rights
         {
             if (!f.Protected || f.Level < 1) continue;
             foreach (var (sid, c) in byPath.GetValueOrDefault(f.Parent!) ?? [])
-                if (c.Effective is "R" or "W" && !cells.ContainsKey((sid, path)))
+                if (c.Effective is "R" or "W" or "F" && !cells.ContainsKey((sid, path)))
                     o[(sid, path)] = (c.Effective, f.Parent!);
         }
         return o;
@@ -426,11 +430,9 @@ public static class Rights
             if (M.SuspiciousName(f.Name))
                 o.Add(new("medium", path, "Name has invisible, combining or mixed-script characters (lookalike?)"));
             if (f.Protected && f.Level > maxLevel) o.Add(new("medium", path, $"Inheritance broken below level {maxLevel}"));
-            if (f.Protected || f.Level == 0)
+            if (f.Protected || f.Level == 0) // the root may inherit it from above (the drive), a protected folder cannot
             {
-                var full = f.Explicit.Where(a => a.Allow && (a.Mask & M.Full) == M.Full && (a.Flags & M.OiCi) == M.OiCi)
-                    .Select(a => a.Sid).ToHashSet();
-                var missing = required.Where(x => !full.Contains(x.Sid)).Select(x => x.Short).ToList();
+                var missing = required.Where(x => !HasFullControl(f.Aces, x.Sid)).Select(x => x.Short).ToList();
                 if (missing.Count > 0) o.Add(new("medium", path, $"{string.Join(" and ", missing)} without full control here"));
             }
             foreach (var a in f.Explicit)

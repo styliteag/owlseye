@@ -159,6 +159,9 @@ public static class M
     }
 
     /// <summary>Additionally for new folders: no reserved device names (CON, NUL, … also with extension, "CON .txt").</summary>
+    /// <summary>Longest name owlseye accepts for a new folder.</summary>
+    public const int MaxFolderName = 200;
+
     public static bool BadFolderName(string name) =>
         BadComponent(name) || Reserved.Contains(name.Split('.')[0].TrimEnd(' ').ToLowerInvariant());
 

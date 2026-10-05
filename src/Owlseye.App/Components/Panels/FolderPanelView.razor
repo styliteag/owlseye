@@ -55,7 +55,7 @@ else if (f.Level > 0)
 {
   <h4>New subfolder</h4>
   <form class="newfolder" @onsubmit="Add">
-    <input type="text" @bind="name" placeholder="Folder name" required maxlength="200">
+    <input type="text" @bind="name" placeholder="Folder name" required maxlength="@M.MaxFolderName">
     <button type="submit">Add</button>
   </form>
   @foreach (var p in Model.NewHere)

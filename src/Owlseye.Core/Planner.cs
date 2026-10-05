@@ -62,7 +62,7 @@ public static class Planner
             IEnumerable<Ace> ex = f.Explicit;
             foreach (var (sid, v) in byPath.GetValueOrDefault(path) ?? [])
                 ex = Acl.SetCell(ex, work.Principals[sid], v);
-            if (f.Protected) ex = Acl.EnsureAdmins(ex, required);
+            if (f.Protected || f.Level == 0) ex = Acl.EnsureAdmins(ex, required, f.Aces.Where(a => a.Inherited));
             folders[path] = f with { Aces = [.. Acl.Canonical(ex), .. f.Aces.Where(a => a.Inherited)] };
         }
         return work with { Folders = folders };

@@ -59,12 +59,14 @@ public static class Acl
     }
 
     /// <summary>The accounts that must have full control (config.json "full_control", by default SYSTEM and
-    /// Administrators) with full control on this folder, subfolders and files, where missing.</summary>
-    public static List<Ace> EnsureAdmins(IEnumerable<Ace> explicitAces, IReadOnlyList<Principal> required)
+    /// Administrators) with full control on this folder, subfolders and files, where missing. On a folder that inherits
+    /// (the share root), full control inherited from above counts.</summary>
+    public static List<Ace> EnsureAdmins(IEnumerable<Ace> explicitAces, IReadOnlyList<Principal> required,
+        IEnumerable<Ace>? inherited = null)
     {
         var list = explicitAces.ToList();
-        var have = list.Where(a => a.Allow && (a.Mask & M.Full) == M.Full && (a.Flags & M.OiCi) == M.OiCi).Select(a => a.Sid).ToHashSet();
-        list.AddRange(required.Where(p => !have.Contains(p.Sid)).Select(p =>
+        List<Ace> all = [.. list, .. inherited ?? []];
+        list.AddRange(required.Where(p => !Rights.HasFullControl(all, p.Sid)).Select(p =>
             AdminAces.FirstOrDefault(a => a.Sid == p.Sid) ?? new Ace(p.Sid, p.Name, p.Kind, M.Full, Flags: M.OiCi)));
         return list;
     }
@@ -88,6 +90,8 @@ public static class Create
             var name = path[(path.LastIndexOf('\\') + 1)..];
             if ((parent != "" ? parent + "\\" + name : name) != path || M.BadFolderName(name))
                 throw new ArgumentException($"Invalid folder name: {Msg.Quote(name)}");
+            if (name.Length > M.MaxFolderName)
+                throw new ArgumentException($"Folder names can have at most {M.MaxFolderName} characters ({name.Length} given)");
             if (existing.Contains(M.Lower(path))) throw new ArgumentException($"{path} already exists");
             if (M.LevelOf(path) > maxLevel) throw new ArgumentException($"New folders can only be created down to level {maxLevel}");
             if (!existing.Contains(M.Lower(parent)) && !planned.Contains(M.Lower(parent)))

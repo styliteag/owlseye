@@ -156,6 +156,18 @@ public class AclModelTests : TestBase
     }
 
     [Fact]
+    public void FullControlAboveIsBlockedLikeReadAndWrite()
+    {
+        var p = new DemoProvider();
+        p.CreateFolder(@"Programs\Payroll\Archive");
+        var s = p.Scan();
+        var f = s.Folders[@"Programs\Payroll\Archive"];
+        s.Folders[f.Path] = f with { Protected = true, Aces = [] };
+        var b = Rights.BlockedCells(s, Rights.Matrix(s));
+        Assert.Equal(("F", @"Programs\Payroll"), b.GetValueOrDefault((Demo.Gsid("G-IT"), f.Path)));
+    }
+
+    [Fact]
     public void UserAceColumnHasSidOfTheUser()
     {
         var p = snap.Principals[Demo.Usid("mmoore")];
