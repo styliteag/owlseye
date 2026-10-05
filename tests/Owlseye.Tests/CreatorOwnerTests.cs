@@ -8,7 +8,7 @@ namespace Owlseye.Tests;
 
 public sealed class CreatorOwnerTests : TestBase
 {
-    const string Finding = "Creator Owner has full control: users can change permissions on what they create here";
+    const string Finding = "Creator Owner has full control: users can change permissions on what they create or own here";
 
     (State St, Session S) Client()
     {
@@ -31,7 +31,7 @@ public sealed class CreatorOwnerTests : TestBase
         var op = plan.AclOps.Single(o => o.Path == "Public");
         Assert.Contains(op.After, a => a.Sid == M.CreatorOwner && a.Mask == M.Full && a.Flags == M.CreatorOwnerFlags);
         Assert.Equal(((string?)null, (string?)"F"), op.Changes.Where(c => c.Sid == M.CreatorOwner).Select(c => (c.Before, c.After)).Single());
-        Assert.Empty(plan.Impact); // nobody gets anything on what exists
+        Assert.Empty(plan.Impact); // owners of files are not read: Windows gives them the right, owlseye cannot list them
 
         s.Apply("", s.Preview().Phash);
         Assert.Equal("F", s.FolderPanel("Public").CreatorOwner);

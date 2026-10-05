@@ -95,6 +95,12 @@ else if (f.Level > 0)
     {
       <text>; inherited: </text><b>@CoText(inh)</b>
     }</p>
+  @if (Model.CreatorOwnerInherited is not null)
+  {
+    <p class="muted small">@(f.Level == 0
+      ? "The inherited part comes from above the share (often the drive); owlseye does not write there, change it in Explorer."
+      : "The inherited part comes from a parent folder: change it there.")</p>
+  }
   @if (Model.CanSetCreatorOwner)
   {
     <div class="choices">
@@ -104,8 +110,8 @@ else if (f.Level > 0)
         <button class="@(Model.CreatorOwner == value ? "primary" : "")" @onclick="() => OnCreatorOwner.InvokeAsync(value)">@label</button>
       }
     </div>
-    <p class="muted small">Applies to files and subfolders created from now on, not to existing ones. With full control, users can
-      change permissions on what they create and lock others out.</p>
+    <p class="muted small">Applies to everything below, also to what exists already: Windows gives each file and subfolder
+      owner the right on it. With full control, users can change permissions on what they own and lock others out.</p>
   }
 }
 @if (Model.Findings.Count > 0)

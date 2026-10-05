@@ -44,6 +44,12 @@ else
     </p>
     <p class="muted small">They inherit from their parent folder. Creating a folder cannot be undone automatically.</p>
   }
+  @if (plan.AclOps.SelectMany(o => o.Changes).Any(c => c.Sid == M.CreatorOwner))
+  {
+    <p class="flash"><b>Creator Owner changes.</b> Windows passes them down to the files and subfolders that exist already: there
+      the owner of each gets the new right (or loses the old one), and whoever creates something new gets it as well. owlseye
+      does not read file owners, so these users are not listed below.</p>
+  }
   @if (V.HiddenLosses is { Count: > 0 } losses)
   {
     <div class="flash err">

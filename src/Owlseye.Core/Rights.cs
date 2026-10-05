@@ -444,7 +444,7 @@ public static class Rights
             if (f.Protected && f.Level > maxLevel) o.Add(new("medium", path, $"Inheritance broken below level {maxLevel}"));
             // own entries; on the root also what it inherits from above the share (the drive often has it)
             if (CreatorOwnerOf(f) == "F" || (f.Level == 0 && !f.Protected && CreatorOwnerOf(f, inherited: true) == "F"))
-                o.Add(new("medium", path, "Creator Owner has full control: users can change permissions on what they create here"));
+                o.Add(new("medium", path, "Creator Owner has full control: users can change permissions on what they create or own here"));
             if (f.Protected || f.Level == 0) // the root may inherit it from above (the drive), a protected folder cannot
             {
                 var missing = required.Where(x => !HasFullControl(f.Aces, x.Sid)).Select(x => x.Short).ToList();
