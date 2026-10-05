@@ -143,11 +143,11 @@ public sealed class ReportTests : TestBase
     public void CellsWithCharactersXmlCannotHoldStayValid()
     {
         var path = Path.Combine(Tmp, "odd.xlsx");
-        Xlsx.Write(path, [new Sheet("A:B/C", ["Name"], [new[] { "Projekte & Co <alt>" }, new[] { "kaputt\uD800x" }, new[] { " leading" }])]);
+        Xlsx.Write(path, [new Sheet("A:B/C", ["Name"], [new[] { "Projects & Co <old>" }, new[] { "broken\uD800x" }, new[] { " leading" }])]);
         using var zip = ZipFile.OpenRead(path);
         using var s = zip.GetEntry("xl/worksheets/sheet1.xml")!.Open();
         var texts = XDocument.Load(s).Descendants(X + "t").Select(t => t.Value).ToList();
-        Assert.Equal(["Name", "Projekte & Co <alt>", "kaputt�x", " leading"], texts);
+        Assert.Equal(["Name", "Projects & Co <old>", "broken�x", " leading"], texts);
         using var wb = zip.GetEntry("xl/workbook.xml")!.Open();
         Assert.Equal("ABC", (string)XDocument.Load(wb).Descendants(X + "sheet").Single().Attribute("name")!);
         Assert.Equal("AA1", Xlsx.Ref(26, 0));

@@ -151,7 +151,7 @@ public class AclModelTests : TestBase
     {
         var c = Rights.Matrix(snap);
         var b = Rights.BlockedCells(snap, c);
-        Assert.False(b.ContainsKey((Demo.Gsid("G-Management"), $@"{OPS}\Sales-Lead"))); // eigener Eintrag dort
+        Assert.False(b.ContainsKey((Demo.Gsid("G-Management"), $@"{OPS}\Sales-Lead"))); // its own entry there
         Assert.False(b.ContainsKey((Demo.Gsid("G-Sales-Lead"), $@"{OPS}\Service-QA"))); // only R| above, which does not inherit
         Assert.Equal(("R", "Programs"), b.GetValueOrDefault((Demo.Gsid("G-AllUsers"), @"Programs\Payroll")));
     }

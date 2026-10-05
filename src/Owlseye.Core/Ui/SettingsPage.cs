@@ -117,7 +117,7 @@ public sealed partial class Session
             if (input.ScanDepth is < 0 or > 100) return new Outcome("/settings", "Scan depth must be 0 (whole tree) to 100.", true);
             if (input.Write is not ("modify" or "no-delete")) return new Outcome("/settings", "W must mean \"modify\" or \"no-delete\".", true);
             var old = St.Cfg;
-            var neu = old with
+            var next = old with
             {
                 ScanDepth = input.ScanDepth,
                 Write = input.Write,
@@ -125,18 +125,18 @@ public sealed partial class Session
                 FullControl = Clean(input.FullControl) is { Count: > 0 } fc ? fc : M.DefaultFullControl,
                 State = input.State.Trim().TrimEnd('\\'),
             };
-            if (neu.State != old.State) neu = neu with { Audit = "", Baseline = "" }; // both follow the state folder now
-            var moveState = !SamePath(old.AuditPath, neu.AuditPath) || old.BaselineDir != neu.BaselineDir
-                || !SamePath(old.SharedFile, neu.SharedFile);
+            if (next.State != old.State) next = next with { Audit = "", Baseline = "" }; // both follow the state folder now
+            var moveState = !SamePath(old.AuditPath, next.AuditPath) || old.BaselineDir != next.BaselineDir
+                || !SamePath(old.SharedFile, next.SharedFile);
             StateMove? moved = null;
             var adopted = false;
             if (moveState)
                 try
                 {
-                    moved = MoveState(old, neu);
-                    if (moved.Existing && File.Exists(neu.SharedFile))
+                    moved = MoveState(old, next);
+                    if (moved.Existing && File.Exists(next.SharedFile))
                     {
-                        neu = neu.WithShared(); // the rules of the admins who use this folder already
+                        next = next.WithShared(); // the rules of the admins who use this folder already
                         adopted = true;
                     }
                 }
@@ -151,21 +151,21 @@ public sealed partial class Session
                 if (before?.ToJsonString() != after?.ToJsonString()) changes[key] = new JsonObject { ["before"] = before, ["after"] = after };
             }
             JsonArray Arr(IEnumerable<string> xs) => new(xs.Select(x => (JsonNode)x!).ToArray());
-            Diff("scan_depth", old.ScanDepth, neu.ScanDepth);
-            Diff("write", old.Write, neu.Write);
-            Diff("hidden", Arr(old.Hidden), Arr(neu.Hidden));
-            Diff("full_control", Arr(old.FullControl), Arr(neu.FullControl));
-            Diff("state", old.State, neu.State);
-            Diff("audit", old.Audit, neu.Audit);
-            Diff("baseline", old.Baseline, neu.Baseline);
+            Diff("scan_depth", old.ScanDepth, next.ScanDepth);
+            Diff("write", old.Write, next.Write);
+            Diff("hidden", Arr(old.Hidden), Arr(next.Hidden));
+            Diff("full_control", Arr(old.FullControl), Arr(next.FullControl));
+            Diff("state", old.State, next.State);
+            Diff("audit", old.Audit, next.Audit);
+            Diff("baseline", old.Baseline, next.Baseline);
             if (changes.Count == 0) return new Outcome("/settings", "Nothing changed.");
             try
             {
-                if (!adopted) Config.SaveShared(neu.SharedFile, neu); // for everyone who uses this state folder
+                if (!adopted) Config.SaveShared(next.SharedFile, next); // for everyone who uses this state folder
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
             {
-                return new Outcome("/settings", $"Shared settings not saved to {neu.SharedFile}: {e.Message}", true);
+                return new Outcome("/settings", $"Shared settings not saved to {next.SharedFile}: {e.Message}", true);
             }
             try
             {
@@ -175,15 +175,15 @@ public sealed partial class Session
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                     File.Copy(old.File, target);
                 }
-                Config.Save(target, neu);
+                Config.Save(target, next);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
             {
                 return new Outcome("/settings", $"Settings not saved: {e.Message}", true);
             }
-            M.Configure(neu.Write, neu.Hidden, neu.FullControl);
-            if (moveState) St.UseState(neu with { File = target }); // the log entry below goes into the new log
-            else St.ApplySettings(neu with { File = target });
+            M.Configure(next.Write, next.Hidden, next.FullControl);
+            if (moveState) St.UseState(next with { File = target }); // the log entry below goes into the new log
+            else St.ApplySettings(next with { File = target });
             St.Audit.Append(new JsonObject
             {
                 ["kind"] = "settings",
@@ -193,7 +193,7 @@ public sealed partial class Session
                 ["reason"] = reason.Trim(),
                 ["status"] = "ok",
                 ["file"] = target,
-                ["shared"] = neu.SharedFile,
+                ["shared"] = next.SharedFile,
                 ["adopted"] = adopted,
                 ["changes"] = changes,
                 ["moved"] = moved is null ? null : new JsonArray(moved.Moved.Select(m => (JsonNode)m!).ToArray()),
@@ -204,12 +204,12 @@ public sealed partial class Session
                 St.Rescan(); // the scan leaves out hidden accounts (no column, no members read)
             else
                 St.Rescan(St.Snap); // W, full control and the state folder: worked out again from the last scan
-            message = (adopted ? $"Now using the state folder {neu.StateDir} and its settings (those of the admins who use it)."
-                    : $"Settings saved to {neu.SharedFile}.")
+            message = (adopted ? $"Now using the state folder {next.StateDir} and its settings (those of the admins who use it)."
+                    : $"Settings saved to {next.SharedFile}.")
                 + (changes.ContainsKey("scan_depth") && St.OpenShare is null ? " The scan depth applies at the next start." : "")
                 + (moved is null ? "" : moved.Existing
-                    ? adopted ? " Nothing was moved." : $" {neu.StateDir} already held owlseye state: it is used from now on, nothing was moved."
-                    : $" Moved {moved.Moved.Count} {(moved.Moved.Count == 1 ? "file" : "files")} to {neu.StateDir}.");
+                    ? adopted ? " Nothing was moved." : $" {next.StateDir} already held owlseye state: it is used from now on, nothing was moved."
+                    : $" Moved {moved.Moved.Count} {(moved.Moved.Count == 1 ? "file" : "files")} to {next.StateDir}.");
         }
         St.NotifyChanged();
         return new Outcome("/settings", message);

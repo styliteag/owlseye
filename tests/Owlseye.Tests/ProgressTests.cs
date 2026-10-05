@@ -29,7 +29,7 @@ public sealed class ProgressTests : TestBase
 
         public Snapshot Scan(Progress? progress = null)
         {
-            progress!.Set(path: "Projekte", done: 7);
+            progress!.Set(path: "Projects", done: 7);
             Reading.Set();
             Assert.True(Go.Wait(Wait));
             if (Fail != "") throw new IOException(Fail);
@@ -111,8 +111,8 @@ public sealed class ProgressTests : TestBase
         Assert.False(st.Ready);
         Assert.Equal("", st.LoadError);
         Assert.True(st.Loading);
-        // "Reading folders", "7 folders read", "Projekte"
-        Assert.Equal(new Status("scan", "Reading folders", "Projekte", 7, 0), st.Progress.Now);
+        // "Reading folders", "7 folders read", "Projects"
+        Assert.Equal(new Status("scan", "Reading folders", "Projects", 7, 0), st.Progress.Now);
         // no HX-Refresh on /progress?page=1 yet: the progress page reloads once ready or an error is set
         p.Go.Set();
         Settled(st);

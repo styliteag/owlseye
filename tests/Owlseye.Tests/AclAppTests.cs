@@ -276,13 +276,13 @@ public sealed class AclAppTests : TestBase
     public void FoldersBelowTheDepthWithoutDeviationAreHidden()
     {
         var p = new DemoProvider();
-        p.CreateFolder(@"HR\Sitzungen");
-        p.CreateFolder(@"HR\Sitzungen\2025");
+        p.CreateFolder(@"HR\Meetings");
+        p.CreateFolder(@"HR\Meetings\2025");
         var (_, s) = Client(p);
         s.SetDepth(1);
         var shown = Rows(s.Matrix());
         Assert.Contains("HR", shown);
-        Assert.DoesNotContain(@"HR\Sitzungen", shown);
+        Assert.DoesNotContain(@"HR\Meetings", shown);
     }
 
     [Fact]
@@ -523,9 +523,9 @@ public sealed class AclAppTests : TestBase
     {
         var sim = SimDir();
         var (st, s) = Client(new SimProvider(sim));
-        s.NewFolder("HR", "Messen");
+        s.NewFolder("HR", "Fairs");
         var phash = PreviewHash(s);
-        Directory.CreateDirectory(Path.Combine(sim, "share", "HR", "Messen")); // someone was faster
+        Directory.CreateDirectory(Path.Combine(sim, "share", "HR", "Fairs")); // someone was faster
         var r = s.Apply("", phash);
         Assert.Contains("already exists. Rescanned", r.Message); // caught before writing, not as an error while applying
         Assert.Equal(["baseline_init"], Kinds(st));
@@ -601,7 +601,7 @@ public sealed class AclAppTests : TestBase
         var log = Path.Combine(Tmp, "a.jsonl");
         var entry = new JsonObject { ["id"] = "x1", ["ts"] = "t", ["share"] = @"\\fs02\Other", ["acl_ops"] = new JsonArray(), ["actor"] = "A" };
         var old = File.Exists(log) ? File.ReadAllText(log) : "";
-        File.WriteAllText(log, old + entry.ToJsonString() + "\n{kaputt\n" + "{\"ts\": \"no id\"}\n");
+        File.WriteAllText(log, old + entry.ToJsonString() + "\n{broken\n" + "{\"ts\": \"no id\"}\n");
         var audit = s.AuditPage(); // status 200
         Assert.Contains(audit.Entries, e => e.Str("id") == "x1");
         Refused(() => s.Undo("x1"));

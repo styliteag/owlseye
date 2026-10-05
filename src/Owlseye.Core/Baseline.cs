@@ -170,10 +170,10 @@ public sealed partial class BaselineStore
 
     Desired Apply(string share, Func<Desired, Desired> change, string actor)
     {
-        var neu = change(Load(share) ?? new Desired());
-        var cells = neu.Cells.Select(kv => new[] { kv.Key.Sid, kv.Key.Path, kv.Value })
+        var updated = change(Load(share) ?? new Desired());
+        var cells = updated.Cells.Select(kv => new[] { kv.Key.Sid, kv.Key.Path, kv.Value })
             .OrderBy(c => c[0], StringComparer.Ordinal).ThenBy(c => c[1], StringComparer.Ordinal).ThenBy(c => c[2], StringComparer.Ordinal);
-        var withCells = neu.Cells.Keys.Select(k => k.Sid).ToHashSet();
+        var withCells = updated.Cells.Keys.Select(k => k.Sid).ToHashSet();
         var entry = new JsonObject
         {
             ["share"] = share,
@@ -181,11 +181,11 @@ public sealed partial class BaselineStore
             ["updated"] = Clock.Now(),
             ["by"] = actor,
             ["cells"] = new JsonArray(cells.Select(c => (JsonNode)new JsonArray(c.Select(x => (JsonNode)x!).ToArray())).ToArray()),
-            ["names"] = new JsonObject(neu.Names.Where(kv => withCells.Contains(kv.Key))
+            ["names"] = new JsonObject(updated.Names.Where(kv => withCells.Contains(kv.Key))
                 .Select(kv => KeyValuePair.Create(kv.Key, (JsonNode?)kv.Value))),
-            ["protected"] = new JsonArray(neu.Protected.OrderBy(M.Lower, M.Ci).Select(p => (JsonNode)p!).ToArray()),
+            ["protected"] = new JsonArray(updated.Protected.OrderBy(M.Lower, M.Ci).Select(p => (JsonNode)p!).ToArray()),
         };
         WriteRaw(share, entry);
-        return neu;
+        return updated;
     }
 }

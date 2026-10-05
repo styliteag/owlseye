@@ -138,13 +138,13 @@ public sealed class Win32Tests : IDisposable
     public void NewFolderIsCreatedWithItsRight()
     {
         var (st, s) = Client();
-        s.NewFolder("C", "Neu Ordner ä");
-        s.SetCell(Users, @"C\Neu Ordner ä", "W");
+        s.NewFolder("C", "New folder ä");
+        s.SetCell(Users, @"C\New folder ä", "W");
         var o = Apply(s);
         Assert.False(o.Error, o.Message);
-        Assert.True(Directory.Exists(Path.Combine(share, "C", "Neu Ordner ä")));
-        Assert.Contains(Fs().ReadDacl(@"C\Neu Ordner ä").Aces, a => a.Sid == Users && a.Mask == M.Write && (a.Flags & M.InheritedAce) == 0);
-        Assert.Equal("W", st.Cells[(Users, @"C\Neu Ordner ä")].Direct);
+        Assert.True(Directory.Exists(Path.Combine(share, "C", "New folder ä")));
+        Assert.Contains(Fs().ReadDacl(@"C\New folder ä").Aces, a => a.Sid == Users && a.Mask == M.Write && (a.Flags & M.InheritedAce) == 0);
+        Assert.Equal("W", st.Cells[(Users, @"C\New folder ä")].Direct);
     }
 
     static void Junction(string link, string target)
@@ -264,16 +264,16 @@ public sealed class Win32Tests : IDisposable
     [Fact]
     public void SwapOfFoldersWithTheSameAclIsNoticedToo()
     {
-        Directory.CreateDirectory(Path.Combine(share, "C", "Eins"));
-        Directory.CreateDirectory(Path.Combine(share, "C", "Zwei"));
+        Directory.CreateDirectory(Path.Combine(share, "C", "One"));
+        Directory.CreateDirectory(Path.Combine(share, "C", "Two"));
         var snap = new AdProvider(new LocalFs(), new LocalDirectory(), share, 20).Scan();
-        Assert.NotEqual("", snap.Folders[@"C\Eins"].Id);
-        Assert.NotEqual(snap.Folders[@"C\Eins"].Id, snap.Folders[@"C\Zwei"].Id);
-        Swap(Path.Combine(share, "C", "Eins"), Path.Combine(share, "C", "Zwei"));
+        Assert.NotEqual("", snap.Folders[@"C\One"].Id);
+        Assert.NotEqual(snap.Folders[@"C\One"].Id, snap.Folders[@"C\Two"].Id);
+        Swap(Path.Combine(share, "C", "One"), Path.Combine(share, "C", "Two"));
         var p = new LocalProvider(share, 20);
-        Assert.Throws<IOException>(() => p.SetFolderAcl(@"C\Eins", false, [new Ace(Users, "Users", "wellknown", M.Write, Flags: M.OiCi)], snap.Folders[@"C\Eins"]));
+        Assert.Throws<IOException>(() => p.SetFolderAcl(@"C\One", false, [new Ace(Users, "Users", "wellknown", M.Write, Flags: M.OiCi)], snap.Folders[@"C\One"]));
         // without a swap the same write goes through
-        p.SetFolderAcl(@"C\Zwei", false, [new Ace(Users, "Users", "wellknown", M.Write, Flags: M.OiCi)], new AdProvider(new LocalFs(), new LocalDirectory(), share, 20).Scan().Folders[@"C\Zwei"]);
+        p.SetFolderAcl(@"C\Two", false, [new Ace(Users, "Users", "wellknown", M.Write, Flags: M.OiCi)], new AdProvider(new LocalFs(), new LocalDirectory(), share, 20).Scan().Folders[@"C\Two"]);
     }
 
     /// <summary>An ACL changed between the conflict check and the write (here: right before the write) is not overwritten.</summary>

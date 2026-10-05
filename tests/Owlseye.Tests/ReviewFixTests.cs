@@ -105,7 +105,7 @@ public sealed class ReviewFixTests : TestBase
     public void LoweringTheDepthDropsWhatWasPendingOnDeeperNewFolders()
     {
         var (st, s) = Client(new DemoProvider());
-        var path = s.NewFolder(@"Operations\Sales-Staff", "Neu");
+        var path = s.NewFolder(@"Operations\Sales-Staff", "New");
         s.SetCell(Demo.Gsid("G-HR"), path, "W");
         s.SetDepth(2);
         Assert.DoesNotContain(path, st.PendingNew.Keys);
@@ -203,11 +203,11 @@ public sealed class ReviewFixTests : TestBase
         log.Append(new System.Text.Json.Nodes.JsonObject
         {
             ["kind"] = "change_start", ["share"] = "x",
-            ["planned_create"] = new System.Text.Json.Nodes.JsonArray(42, "Neu"),
+            ["planned_create"] = new System.Text.Json.Nodes.JsonArray(42, "New"),
             ["planned_acl"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject(), "HR", 7),
         });
         var e = Assert.Single(log.Entries());
-        Assert.Equal(["Neu", "HR"], e.Arr("missing")!.Select(m => (string)m!).ToArray());
+        Assert.Equal(["New", "HR"], e.Arr("missing")!.Select(m => (string)m!).ToArray());
     }
 
     [Fact]

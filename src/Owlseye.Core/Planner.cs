@@ -219,7 +219,7 @@ public static class Planner
         }
 
         var old = Rights.ExplicitCells(snap);
-        var neu = Rights.ExplicitCells(final);
+        var newCells = Rights.ExplicitCells(final);
         var paths = want.Keys.Select(k => k.Path).Union(auto.Keys.Select(k => k.Path)).Union(touched)
             .OrderBy(M.LevelOf).ThenBy(M.Lower, M.Ci).ToList();
         var ops = new List<AclOp>();
@@ -235,13 +235,13 @@ public static class Planner
             var prot0 = f0?.Protected ?? false;
             if (prot0 == f1.Protected && Acl.SameKeys(b, a)) continue; // also new folders without own entries: creating is enough
             var sids = old.Keys.Where(k => k.Path == path).Select(k => k.Sid)
-                .Union(neu.Keys.Where(k => k.Path == path).Select(k => k.Sid))
+                .Union(newCells.Keys.Where(k => k.Path == path).Select(k => k.Sid))
                 .OrderBy(s => principals.TryGetValue(s, out var p) ? M.Lower(p.Short) : s, M.Ci);
             var ch = new List<Change>();
             foreach (var sid in sids)
             {
                 var v0 = old.GetValueOrDefault((sid, path));
-                var v1 = neu.GetValueOrDefault((sid, path));
+                var v1 = newCells.GetValueOrDefault((sid, path));
                 if (v0?.Value != v1?.Value || (v0 is not null && v1 is not null && v0 != v1))
                 {
                     var name = principals.TryGetValue(sid, out var p) ? p.Name : sid;

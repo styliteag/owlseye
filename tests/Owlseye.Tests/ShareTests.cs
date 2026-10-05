@@ -123,16 +123,16 @@ public sealed class ShareTests : TestBase
     [Fact]
     public void StartOpensTheShareOpenedLast()
     {
-        var st = RunMain(@"E:\Eins");
-        Assert.Equal(@"E:\Eins", st.Provider.Share);
+        var st = RunMain(@"E:\One");
+        Assert.Equal(@"E:\One", st.Provider.Share);
         Assert.NotNull(st.OpenShare);
         Assert.True(st.Ready, st.LoadError);
-        Assert.Equal(@"E:\Eins", Settings.LastShare("local"));
-        Settings.RememberShare("local", @"D:\Zwei"); // chosen in the UI
-        Assert.Equal(@"D:\Zwei", RunMain(null).Provider.Share);
-        Assert.Equal(@"F:\Drei", RunMain(@"F:\Drei").Provider.Share); // explicit wins
+        Assert.Equal(@"E:\One", Settings.LastShare("local"));
+        Settings.RememberShare("local", @"D:\Two"); // chosen in the UI
+        Assert.Equal(@"D:\Two", RunMain(null).Provider.Share);
+        Assert.Equal(@"F:\Three", RunMain(@"F:\Three").Provider.Share); // explicit wins
         // the app starts the first scan in the background: the window opens at once and shows its progress
-        var bg = Launch.Build("local", @"E:\Eins", null, (_, share) => new AtPath(share));
+        var bg = Launch.Build("local", @"E:\One", null, (_, share) => new AtPath(share));
         var until = DateTime.UtcNow.AddSeconds(10);
         while (!bg.Ready && bg.LoadError == "" && DateTime.UtcNow < until) Thread.Sleep(20);
         Assert.True(bg.Ready, bg.LoadError);

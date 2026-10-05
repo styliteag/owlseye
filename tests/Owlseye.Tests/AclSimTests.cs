@@ -79,9 +79,9 @@ public sealed class AclSimTests : TestBase
     [Fact]
     public void NewFolderOnDiskShowsUpAndInherits()
     {
-        Directory.CreateDirectory(Path.Combine(Share, "Programs", "Neu"));
+        Directory.CreateDirectory(Path.Combine(Share, "Programs", "New"));
         var s = new SimProvider(simDir).Scan();
-        Assert.Equal("R", Rights.Matrix(s)[(Gsid("G-AllUsers"), @"Programs\Neu")].Effective);
+        Assert.Equal("R", Rights.Matrix(s)[(Gsid("G-AllUsers"), @"Programs\New")].Effective);
     }
 
     [Fact]
@@ -179,9 +179,9 @@ public sealed class AclSimTests : TestBase
     public void CreateFolderChecks()
     {
         var p = new SimProvider(simDir);
-        p.CreateFolder(@"HR\Neu");
-        Assert.True(Directory.Exists(Path.Combine(Share, "HR", "Neu")));
-        foreach (var bad in new[] { @"HR\Neu", @"Nope\X", @"HR\CON", "HR\\x." }) // how deep is checked by the planner
+        p.CreateFolder(@"HR\New");
+        Assert.True(Directory.Exists(Path.Combine(Share, "HR", "New")));
+        foreach (var bad in new[] { @"HR\New", @"Nope\X", @"HR\CON", "HR\\x." }) // how deep is checked by the planner
         {
             var e = Record.Exception(() => p.CreateFolder(bad));
             // pytest.raises((PermissionError, FileExistsError))
@@ -206,9 +206,9 @@ public sealed class AclSimTests : TestBase
         var outside = Path.Combine(Tmp, "outside");
         Directory.Move(Path.Combine(Share, "HR"), outside); // after the scan the folder is replaced by a link
         if (!Symlink(Path.Combine(Share, "HR"), outside)) return; // creating symlinks needs developer mode or admin rights on Windows
-        Assert.Throws<UnauthorizedAccessException>(() => p.CreateFolder(@"HR\Neu"));
+        Assert.Throws<UnauthorizedAccessException>(() => p.CreateFolder(@"HR\New"));
         Assert.Throws<UnauthorizedAccessException>(() => p.SetFolderAcl("HR", true, []));
-        Assert.False(Directory.Exists(Path.Combine(outside, "Neu")));
+        Assert.False(Directory.Exists(Path.Combine(outside, "New")));
     }
 
     [Fact]

@@ -37,7 +37,7 @@ public class AclPlannerTests : TestBase
                 ("G-Interns", OPS, null, "R|", true),
                 ("G-Interns", "", null, "R|", true)), // empty group: nobody gets in another way
             Changes(plan));
-        Assert.Equal(["", OPS, $@"{OPS}\Sales-QA"], plan.AclOps.Select(o => o.Path)); // Eltern zuerst
+        Assert.Equal(["", OPS, $@"{OPS}\Sales-QA"], plan.AclOps.Select(o => o.Path)); // parents first
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class AclPlannerTests : TestBase
         var op = Assert.Single(plan.AclOps, o => o.Path == @"Public\Transfer");
         var kept = op.After.Select(a => a.Sid).ToHashSet();
         Assert.Superset(new HashSet<string> { M.System, M.Admins, Gsid("G-AllUsers"), Gsid("G-Transfer") }, kept);
-        Assert.Contains(op.After, a => a.Kind == "user"); // mmoore bleibt, Befund statt stilles Entfernen
+        Assert.Contains(op.After, a => a.Kind == "user"); // mmoore stays: a finding instead of a silent removal
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class AclPlannerTests : TestBase
         var op = Assert.Single(plan.AclOps);
         Assert.Equal((false, true), (op.ProtectedBefore, op.ProtectedAfter));
         Assert.Contains(("G-Management", $@"{OPS}\Service-Staff", (string?)null, (string?)"W", false), Changes(plan));
-        Assert.Empty(plan.Impact); // niemand verliert etwas
+        Assert.Empty(plan.Impact); // nobody loses anything
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public class AclPlannerTests : TestBase
         var op = Assert.Single(plan.AclOps);
         Assert.Contains(("G-Management", $@"{OPS}\Sales-Lead", (string?)"W", (string?)null, false), Changes(plan));
         Assert.Contains(Gsid("G-Sales-Lead"), op.After.Select(a => a.Sid).ToHashSet());
-        Assert.DoesNotContain(M.System, op.After.Select(a => a.Sid).ToHashSet()); // kommt jetzt geerbt
+        Assert.DoesNotContain(M.System, op.After.Select(a => a.Sid).ToHashSet()); // now inherited
     }
 
     [Fact]
@@ -246,9 +246,9 @@ public class AclPlannerTests : TestBase
     [Fact]
     public void ExtraColumnCanGetARight()
     {
-        var p = new Principal("S-1-5-21-1-2-3-9999", "DEMO\\G-Neu", "group");
+        var p = new Principal("S-1-5-21-1-2-3-9999", "DEMO\\G-New", "group");
         var plan = Planner.Build(snap, Ch(p.Sid, "HR", "R"), extra: new Dictionary<string, Principal> { [p.Sid] = p });
-        Assert.Contains(("G-Neu", "HR", (string?)null, (string?)"R", false), Changes(plan));
+        Assert.Contains(("G-New", "HR", (string?)null, (string?)"R", false), Changes(plan));
     }
 
     [Fact]
@@ -256,12 +256,12 @@ public class AclPlannerTests : TestBase
     {
         var plan = Planner.Build(
             snap,
-            Ch(Gsid("G-HR"), @"Public\Neu\Sub", "W"),
-            newFolders: new Dictionary<string, string> { [@"Public\Neu"] = "Public", [@"Public\Neu\Sub"] = @"Public\Neu" });
-        Assert.Equal([@"Public\Neu", @"Public\Neu\Sub"], plan.CreateOps);
+            Ch(Gsid("G-HR"), @"Public\New\Sub", "W"),
+            newFolders: new Dictionary<string, string> { [@"Public\New"] = "Public", [@"Public\New\Sub"] = @"Public\New" });
+        Assert.Equal([@"Public\New", @"Public\New\Sub"], plan.CreateOps);
         var op = Assert.Single(plan.AclOps);
-        Assert.True(op.NewFolder && op.Path == @"Public\Neu\Sub");
-        Assert.Superset(new HashSet<string> { @"Public\Neu", @"Public\Neu\Sub" }, plan.Impact.Select(i => i.Path).ToHashSet());
+        Assert.True(op.NewFolder && op.Path == @"Public\New\Sub");
+        Assert.Superset(new HashSet<string> { @"Public\New", @"Public\New\Sub" }, plan.Impact.Select(i => i.Path).ToHashSet());
     }
 
     [Theory]
@@ -272,8 +272,8 @@ public class AclPlannerTests : TestBase
     [InlineData(OPS + @"\Sales-Staff\2025\x", OPS + @"\Sales-Staff\2025")]
     public void BadNewFolders(string path, string parent)
     {
-        var neu = new Dictionary<string, string> { [path] = parent };
-        Assert.Throws<PlanError>(() => Planner.Build(snap, NoCells, newFolders: neu));
+        var folders = new Dictionary<string, string> { [path] = parent };
+        Assert.Throws<PlanError>(() => Planner.Build(snap, NoCells, newFolders: folders));
     }
 
     [Fact]
@@ -310,8 +310,8 @@ public class AclPlannerTests : TestBase
     [InlineData("LPT²")]
     public void BadFolderNames(string name)
     {
-        var neu = new Dictionary<string, string> { [$"Public\\{name}"] = "Public" };
-        Assert.Throws<PlanError>(() => Planner.Build(snap, NoCells, newFolders: neu));
+        var folders = new Dictionary<string, string> { [$"Public\\{name}"] = "Public" };
+        Assert.Throws<PlanError>(() => Planner.Build(snap, NoCells, newFolders: folders));
     }
 
     [Fact]

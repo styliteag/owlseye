@@ -145,7 +145,7 @@ public sealed class DesiredTests : TestBase
             Aces(s, "HR").Add(Ace(Gsid("G-Management"))); // added
             s["acls"]!["Programs"]!["aces"] = new JsonArray(Aces(s, "Programs")
                 .Where(a => (string)a![3]! != Gsid("G-AllUsers")).Select(a => a!.DeepClone()).ToArray());
-            s["acls"]![OPS + "\\Service-Staff"]!["protected"] = true; // Vererbung unterbrochen
+            s["acls"]![OPS + "\\Service-Staff"]!["protected"] = true; // inheritance broken
         });
         var s = new SimProvider(SimDir).Scan();
         var got = Drift.Diff(s, desired).Select(d => (d.Change, d.Path, d.Name.Split('\\')[^1], d.Before, d.After)).ToHashSet();
@@ -275,7 +275,7 @@ public sealed class DesiredTests : TestBase
         Edit(SimDir, s => Aces(s, "HR").Add(Ace(Gsid("G-Management"))));
         c.Rescan();
         Assert.NotEmpty(c.St.Drift);
-        var r = c.DriftReset("neu");
+        var r = c.DriftReset("new");
         Assert.Contains("Desired state deleted", r.Message);
         Assert.Empty(c.St.Drift); // actual is now desired
         var kinds = Kinds(c);
@@ -288,7 +288,7 @@ public sealed class DesiredTests : TestBase
     public void DeleteRepairsCorruptFile()
     {
         Directory.CreateDirectory(AppData);
-        File.WriteAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE)), "{kaputt");
+        File.WriteAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE)), "{broken");
         var c = Client(SimDir, Tmp);
         Assert.NotEqual("", c.DriftPage().BaselineError); // assert "cannot be read" in c.get("/drift").text
         c.DriftReset("");
@@ -300,10 +300,10 @@ public sealed class DesiredTests : TestBase
     public void CorruptBaselineIsNotOverwritten()
     {
         Directory.CreateDirectory(AppData);
-        File.WriteAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE)), "{kaputt");
+        File.WriteAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE)), "{broken");
         var c = Client(SimDir, Tmp);
         Assert.NotEqual("", c.DriftPage().BaselineError); // assert "cannot be read" in c.get("/drift").text
-        Assert.Equal("{kaputt", File.ReadAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE))));
+        Assert.Equal("{broken", File.ReadAllText(Path.Combine(AppData, BaselineStore.FileName(SHARE))));
     }
 
     // --- Several windows, restarts, inheritance ------------------------------------------------

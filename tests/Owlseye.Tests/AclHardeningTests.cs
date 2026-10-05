@@ -9,7 +9,7 @@ namespace Owlseye.Tests;
 
 public sealed class AclHardeningTests : TestBase
 {
-    const string Angebote = @"Vertrieb\Angebote";
+    const string Quotes = @"Sales\Quotes";
 
     /// <summary>sim_dir fixture</summary>
     readonly string simDir;
@@ -48,7 +48,7 @@ public sealed class AclHardeningTests : TestBase
         {
             ["id"] = "x1", ["ts"] = "t", ["share"] = @"\\fs02\Other", ["ops"] = new JsonArray(), ["acl_ops"] = new JsonArray(), ["actor"] = "A",
         };
-        File.WriteAllText(log, File.ReadAllText(log) + entry.ToJsonString() + "\n{kaputt\n" + "{\"ts\": \"no id\"}\n");
+        File.WriteAllText(log, File.ReadAllText(log) + entry.ToJsonString() + "\n{broken\n" + "{\"ts\": \"no id\"}\n");
         // c.get("/audit").status_code == 200
         var page = c.AuditPage();
         Assert.Contains(page.Entries, e => e.Str("id") == "x1");
@@ -57,11 +57,11 @@ public sealed class AclHardeningTests : TestBase
         Assert.Equal(400, err.Status);
     }
 
-    // L5/L6: Pfadkomponenten
+    // L5/L6: path components
     [Theory]
-    [InlineData("Vertrieb.")]
-    [InlineData("Vertrieb ")]
-    [InlineData("Vert\u0001rieb")]
+    [InlineData("Sales.")]
+    [InlineData("Sales ")]
+    [InlineData("Sal\u0001es")]
     public void TrailingDotSpaceControlCharsRefused(string path)
     {
         Assert.Throws<UnauthorizedAccessException>(() => new SimProvider(simDir).SetFolderAcl(path, true, []));
@@ -79,14 +79,14 @@ public sealed class AclHardeningTests : TestBase
     [Fact]
     public void InheritValueIsValidated()
     {
-        // Python: POST /folder/inheritance with path=Vertrieb\Angebote, inherit="x" -> 400.
+        // Python: POST /folder/inheritance with path=Sales\Quotes, inherit="x" -> 400.
         // In C# Session.SetInheritance takes `bool inherit`: a value other than inherit/break cannot be passed at all.
         var c = Client(simDir, Tmp);
         var param = typeof(Session).GetMethod(nameof(Session.SetInheritance))!.GetParameters().Single(p => p.Name == "inherit");
         Assert.Equal(typeof(bool), param.ParameterType);
-        // The same request otherwise: Vertrieb\Angebote is not in the demo share, so the route answers 400 (in Python this
+        // The same request otherwise: Sales\Quotes is not in the demo share, so the route answers 400 (in Python this
         // check runs before the one on `inherit`).
-        var err = Assert.Throws<UserError>(() => c.SetInheritance(Angebote, false));
+        var err = Assert.Throws<UserError>(() => c.SetInheritance(Quotes, false));
         Assert.Equal(400, err.Status);
     }
 
@@ -94,21 +94,21 @@ public sealed class AclHardeningTests : TestBase
     [Fact]
     public void UnaddressableNameIsAFindingNotReadOrDescended()
     {
-        // Win32 strips trailing dots/spaces: 'Ende.' would read the ACL of 'Ende'. Flag it, do not look inside.
+        // Win32 strips trailing dots/spaces: 'End.' would read the ACL of 'End'. Flag it, do not look inside.
         var pub = Path.Combine(Share, "Public");
-        MkdirRaw(Path.Combine(pub, "Ende."));
-        Directory.CreateDirectory(RawPath(pub, "Ende.", "Deeper")); // mkdir_raw(bad / "Deeper")
+        MkdirRaw(Path.Combine(pub, "End."));
+        Directory.CreateDirectory(RawPath(pub, "End.", "Deeper")); // mkdir_raw(bad / "Deeper")
         var s = new SimProvider(simDir).Scan();
-        var f = s.Folders["Public\\Ende."];
+        var f = s.Folders["Public\\End."];
         Assert.True(f.Error != "" && f.OtherAces);
-        Assert.DoesNotContain("Public\\Ende.\\Deeper", s.Folders.Keys);
-        Assert.Contains(Rights.Findings(s), x => x.Path == "Public\\Ende." && x.Severity == "high");
+        Assert.DoesNotContain("Public\\End.\\Deeper", s.Folders.Keys);
+        Assert.Contains(Rights.Findings(s), x => x.Path == "Public\\End." && x.Severity == "high");
     }
 
     [Theory]
-    [InlineData("Rechnungen\u202e")]
-    [InlineData("Lohn\u200b")]
-    [InlineData("Ver\u00a0trieb")]
+    [InlineData("Invoices\u202e")]
+    [InlineData("Payroll\u200b")]
+    [InlineData("Sa\u00a0les")]
     public void InvisibleOrBidiCharactersAreAFinding(string name)
     {
         Directory.CreateDirectory(Path.Combine(Share, "Public", name));
@@ -126,8 +126,8 @@ public sealed class AclHardeningTests : TestBase
         if (!Symlink(Path.Combine(Share, "Public", "Link"), Path.Combine(Share, "HR"))) return; // pytest.skip
         var fs = new SimFs(new SimState(simDir), Share); // SimProvider(sim_dir).fs
         Assert.Throws<UnauthorizedAccessException>(() => fs.WriteDacl("Public\\Link", true, []));
-        Assert.Throws<UnauthorizedAccessException>(() => fs.Mkdir("Public\\Link\\Neu"));
-        Assert.False(Directory.Exists(Path.Combine(Share, "HR", "Neu")));
+        Assert.Throws<UnauthorizedAccessException>(() => fs.Mkdir("Public\\Link\\New"));
+        Assert.False(Directory.Exists(Path.Combine(Share, "HR", "New")));
     }
 
     [Fact]
@@ -137,8 +137,8 @@ public sealed class AclHardeningTests : TestBase
     }
 
     [Theory]
-    [InlineData("Verka\u0308ufe")] // NFD umlaut
-    [InlineData("D\u0430ten")] // Cyrillic a
+    [InlineData("Cafe\u0301")] // NFD: e + combining accent
+    [InlineData("D\u0430ta")] // Cyrillic a
     public void NfdAndMixedScriptNamesAreAFinding(string name)
     {
         Directory.CreateDirectory(Path.Combine(Share, "Public", name));
@@ -172,6 +172,6 @@ public sealed class AclHardeningTests : TestBase
     [Fact]
     public void FolderAclRefusesUnaddressablePath()
     {
-        Assert.Throws<UnauthorizedAccessException>(() => new SimProvider(simDir).FolderAcl("Public\\Ende."));
+        Assert.Throws<UnauthorizedAccessException>(() => new SimProvider(simDir).FolderAcl("Public\\End."));
     }
 }
