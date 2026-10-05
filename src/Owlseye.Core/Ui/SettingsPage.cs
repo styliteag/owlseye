@@ -115,7 +115,8 @@ public sealed partial class Session
             if (blocked is not null) return new Outcome("/settings", blocked, true);
             if (St.PendingCount > 0) return new Outcome("/settings", "Apply or discard the pending changes first: saving works the rights out anew.", true);
             if (input.ScanDepth is < 0 or > 100) return new Outcome("/settings", "Scan depth must be 0 (whole tree) to 100.", true);
-            if (input.Write is not ("modify" or "no-delete")) return new Outcome("/settings", "W must mean \"modify\" or \"no-delete\".", true);
+            if (input.Write is not ("modify" or "no-delete" or "keep-folder"))
+                return new Outcome("/settings", "W must mean \"modify\", \"no-delete\" or \"keep-folder\".", true);
             var old = St.Cfg;
             var next = old with
             {

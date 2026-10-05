@@ -53,8 +53,7 @@ public static class Acl
     {
         var rest = explicitAces.Where(a => !(a.Allow && a.Sid == p.Sid)).ToList();
         if (value is null) return rest;
-        var (mask, flags) = M.Standard[value];
-        rest.Add(new Ace(p.Sid, p.Name, p.Kind, mask, true, false, flags));
+        foreach (var (mask, flags) in M.StandardAces(value)) rest.Add(new Ace(p.Sid, p.Name, p.Kind, mask, true, false, flags));
         return rest;
     }
 

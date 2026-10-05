@@ -132,10 +132,30 @@ public sealed class RightsSettingsTests : TestBase, IDisposable
     }
 
     [Fact]
+    public void KeepFolderWritesWAsTwoEntriesSoTheFolderItselfStays()
+    {
+        M.Configure("keep-folder", []);
+        Assert.Equal(M.Modify, M.Write);
+        Ace E(uint mask, int flags) => new("S", "X\\G", "group", mask, Flags: flags);
+        Assert.Equal(("W", true), Rights.Classify([E(M.Modify, M.OiCi | M.InheritOnly), E(M.WriteNoDelete, M.ThisFolder)]));
+        Assert.Equal(("W", false), Rights.Classify([E(M.Modify, M.OiCi)])); // the usual Modify entry: W*, set it again
+        Assert.Equal(("W|", true), Rights.Classify([E(M.WriteNoDelete, M.ThisFolder)]));
+        Assert.Equal("W Modify inside (the folder itself cannot be deleted, renamed or moved)", Labels.Label("W"));
+
+        const string Staff = @"Operations\Sales-Staff";
+        var snap = new DemoProvider().Scan();
+        var plan = Planner.Build(snap, new Dictionary<(string Sid, string Path), string?> { [(Demo.Gsid("G-HR"), Staff)] = "W" });
+        var after = plan.AclOps.Single(o => o.Path == Staff).After.Where(a => a.Sid == Demo.Gsid("G-HR")).Select(a => (a.Mask, a.Flags)).Order();
+        Assert.Equal([(M.WriteNoDelete, M.ThisFolder), (M.Modify, M.OiCi | M.InheritOnly)], after.ToList().Order());
+        Assert.Equal(("W", true), (plan.CellsAfter[(Demo.Gsid("G-HR"), Staff)].Direct, plan.CellsAfter[(Demo.Gsid("G-HR"), Staff)].Standard));
+        Assert.Equal("W", plan.CellsAfter[(Demo.Gsid("G-HR"), Staff + @"\2025")].Effective); // passes down like W
+    }
+
+    [Fact]
     public void UnknownWriteSettingIsRefused()
     {
         var e = Assert.Throws<ArgumentException>(() => M.Configure("delete", []));
-        Assert.Contains("\"modify\" or \"no-delete\"", e.Message);
+        Assert.Contains("\"modify\", \"no-delete\" or \"keep-folder\"", e.Message);
     }
 
     [Fact]

@@ -74,6 +74,11 @@ else
         var gone = o.Before.Count(a => !a.Allow);
         <tr><td class="mono">@o.Path</td><td colspan="3"><b>clear</b>: back to the default; inherits from the parent, no entries of its own@(gone > 0 ? $" (also removes {gone} deny entr{(gone == 1 ? "y" : "ies")})" : "")</td><td></td></tr>
       }
+      else if (o.Reinherited)
+      {
+        <tr><td class="mono">@Root(o.Path)</td><td colspan="3"><b>↻ re-apply inheritance</b>: Windows takes the parent folder's inherited
+          entries again, also below; the ones it brought from where it was before go. This cannot be undone automatically.</td><td></td></tr>
+      }
       else if (o.ProtectedBefore != o.ProtectedAfter)
       {
         <tr><td class="mono">@Root(o.Path)</td><td colspan="3" class="@(o.ProtectedAfter ? "loss" : "gain")">@(o.ProtectedAfter

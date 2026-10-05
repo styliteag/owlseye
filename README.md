@@ -21,7 +21,7 @@ User → security group (e.g. universal) → folder ACL. A group may appear on a
 | Cell | ACL entry | as in a typical Excel list |
 | --- | --- | --- |
 | `R` | Read, execute (`0x1200A9`), this folder + subfolders + files | `R` |
-| `W` | Modify (`0x1301BF`: read, execute, write and delete), this folder + subfolders + files; with `"write": "no-delete"` in config.json read + write without delete (`0x1201BF`) | `W` |
+| `W` | Modify (`0x1301BF`: read, execute, write and delete), this folder + subfolders + files; with `"write": "no-delete"` in config.json read + write without delete (`0x1201BF`); with `"write": "keep-folder"` two entries, write without delete on the folder itself and Modify on its subfolders and files, so users cannot delete, rename or move the folder | `W` |
 | `R\|` | Read this folder only (list, to reach subfolders) | `R\|` |
 | `W\|` | The same as `W`, this folder only | `W\|` |
 | `F` | Full control (`0x1F01FF`), this folder + subfolders + files: also change permissions and take ownership; for admin and service groups (a finding marks it) | |
@@ -34,6 +34,7 @@ The masks live in one place (`src/Owlseye.Core/Model.cs`: `M.Read`, `M.Write`, `
 - **Creator Owner** (German: Ersteller-Besitzer) and **Owner Rights** (Besitzerrechte) are no columns, since they stand for whoever creates or owns a file or folder. The folder panel shows and sets them; Windows passes both down to what exists as well, where the owner of each file and subfolder gets them.
   - Creator Owner: nothing, Modify or full control, for subfolders and files only. These are personal rights outside the groups that stay when someone leaves a group; full control is a finding. For shares managed through groups, nothing is the usual choice.
   - Owner Rights: whoever creates something owns it, and an owner may always read and change its permissions. An Owner Rights entry replaces that: "no personal rights" (owners only read the permissions) or Modify. Then users cannot change the permissions of what they own and lock others out.
+- **Moved folders:** a folder moved within the volume (also by a user on the share) keeps the inherited entries of its old place; Windows does not apply the new parent's until it or a folder above is written. owlseye compares each folder's inherited entries with what its parent passes down: a moved folder is a finding, the matrix shows what Windows really applies there ("left over from a move"), and "Re-apply inheritance" in the folder panel writes it so Windows takes the parent's entries again (also below). Any write above a moved folder has the same effect, and the preview shows it. To keep users from moving the folders that carry the rights, use `"write": "keep-folder"`.
 - **What owlseye does not touch:** deny entries, entries of other accounts on a changed folder, ACLs with other ACE types (e.g. conditional), paths across junctions/symlinks.
 
 ## Structure

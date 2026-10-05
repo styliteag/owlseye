@@ -30,13 +30,18 @@ public static class Labels
         null => "No access",
         "R|" => "R| List (this folder only)",
         "R" => "R Read",
-        "W|" => M.Write == M.Modify ? "W| Modify (this folder only)" : "W| Write, no delete (this folder only)",
-        "W" => M.Write == M.Modify ? "W Modify" : "W Write, no delete",
+        "W|" => M.Write == M.Modify && !M.KeepFolder ? "W| Modify (this folder only)" : "W| Write, no delete (this folder only)",
+        "W" => "W " + WriteText(),
         "F" => "F Full control",
         _ => v,
     };
 
     public static string Short(string? v) => v ?? "–";
+
+    /// <summary>What W means with the setting "write".</summary>
+    public static string WriteText() =>
+        M.KeepFolder ? "Modify inside (the folder itself cannot be deleted, renamed or moved)"
+        : M.Write == M.Modify ? "Modify" : "Write, no delete";
 
     /// <summary>A value in a change: cell values as they are, owner entries in words.</summary>
     public static string Value(string? sid, string? v) => sid is not null && M.IsOwnerSid(sid) ? OwnerEntryText(sid, v) : Short(v);
@@ -181,7 +186,8 @@ public sealed record OwnerEntryView(string Sid, string? Value, string? Inherited
 
 public sealed record FolderPanel(Folder F, string Share, bool CanAdd, IReadOnlyList<string> NewHere, bool IsNew, bool Protected,
     bool Pending, bool CanToggle, bool Clearing, bool CanClear, IReadOnlyList<Grant> Grants, IReadOnlyList<Finding> Findings,
-    IReadOnlyList<HiddenEntry> Hidden, IReadOnlyList<OwnerEntryView> OwnerEntries, bool CanSetOwnerEntries);
+    IReadOnlyList<HiddenEntry> Hidden, IReadOnlyList<OwnerEntryView> OwnerEntries, bool CanSetOwnerEntries,
+    bool Stale = false, bool Reinheriting = false);
 
 public sealed record GroupsPanel(string Gq, IReadOnlyList<Principal> Hits, IReadOnlySet<string> Shown, bool HiddenHint);
 

@@ -103,6 +103,10 @@
             if (a.ContainsKey("protected_before"))
             {
               var path = Root(a.Str("path") ?? "");
+              if (a.Bool("reinherited") == true)
+              {
+                <span class="gain">↻ inheritance re-applied</span> <span class="mono">@path</span><br>
+              }
               if (a.Bool("cleared") == true)
               {
                 <span class="loss">cleared</span> <span class="mono">@a.Str("path")</span> <span class="muted">(inherits, no own entries)</span><br>

@@ -178,6 +178,9 @@ own account: no service account, no stored password.
 - owlseye keeps the desired state (cells and broken inheritance) per share; after every scan it lists added, removed and
   changed entries, inheritance changes and missing folders, with the effect on users (F-D1, F-D2, F-D8).
 - A banner on the matrix and a badge in the menu point to it (F-M9).
+- A folder moved into another folder keeps the rights of its old place. owlseye finds it (finding, also below the
+  depth), shows what really applies there, and "Re-apply inheritance" gives it the rights of its new place (F-R13, F-I5).
+  With W as "Modify inside", users cannot move the folders that carry a W entry at all (F-R1).
 
 ### 4.2 Keep or restore
 

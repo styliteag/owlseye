@@ -37,17 +37,27 @@ public static class M
     public const uint Delete = 0x10000, DeleteChild = 0x40, WriteDac = 0x40000, WriteOwner = 0x80000;
     public const uint ReadControl = 0x20000, Synchronize = 0x100000;
 
-    /// <summary>The mask of W: Modify (default, as Windows and most shares use it) or write without delete
-    /// (config "write": "no-delete"). Set once at start by <see cref="Configure"/>.</summary>
+    /// <summary>The mask of W: Modify (default, as Windows and most shares use it, also with "keep-folder") or write
+    /// without delete (config "write": "no-delete"). Set once at start by <see cref="Configure"/>.</summary>
     public static uint Write { get; private set; } = Modify;
 
-    public static IReadOnlyDictionary<string, (uint Mask, int Flags)> Standard { get; private set; } = StandardFor(Modify);
+    /// <summary>config "write": "keep-folder": W is Modify on subfolders and files but only write without delete on the
+    /// folder itself, so users cannot delete, rename or move the folder that has the W entry (W| likewise).</summary>
+    public static bool KeepFolder { get; private set; }
 
-    static Dictionary<string, (uint Mask, int Flags)> StandardFor(uint write) => new()
+    /// <summary>The ACEs (mask, flags) of a cell value: one, or two for W with "keep-folder".</summary>
+    public static IReadOnlyList<(uint Mask, int Flags)> StandardAces(string value) =>
+        KeepFolder && value == "W" ? [(WriteNoDelete, ThisFolder), (Modify, OiCi | InheritOnly)] : [Standard[value]];
+
+    /// <summary>The main entry of each cell value (for W with "keep-folder" the one for subfolders and files, see
+    /// StandardAces).</summary>
+    public static IReadOnlyDictionary<string, (uint Mask, int Flags)> Standard { get; private set; } = StandardFor(Modify, false);
+
+    static Dictionary<string, (uint Mask, int Flags)> StandardFor(uint write, bool keepFolder) => new()
     {
         ["R|"] = (Read, ThisFolder),
         ["R"] = (Read, OiCi),
-        ["W|"] = (write, ThisFolder),
+        ["W|"] = (keepFolder ? WriteNoDelete : write, ThisFolder),
         ["W"] = (write, OiCi),
         ["F"] = (Full, OiCi), // full control: also change permissions and take ownership
     };
@@ -64,7 +74,7 @@ public static class M
     /// Administrators, Domain Admins (resolved against the scan, see Rights.RequiredFullControl).</summary>
     public static IReadOnlyList<string> FullControl { get; private set; } = DefaultFullControl;
 
-    /// <summary>Applies config.json: what W means ("modify" or "no-delete"), further accounts to hide like the
+    /// <summary>Applies config.json: what W means ("modify", "no-delete" or "keep-folder"), further accounts to hide like the
     /// administrators (SIDs or names, "DOMAIN\name" or "name") and the accounts that must have full control. Called at
     /// start before the provider scans, and when the settings are saved.</summary>
     public static void Configure(string write, IEnumerable<string> hidden, IEnumerable<string>? fullControl = null)
@@ -73,11 +83,12 @@ public static class M
         FullControl = fc.Count > 0 ? fc : DefaultFullControl;
         Write = write switch
         {
-            "modify" => Modify,
+            "modify" or "keep-folder" => Modify,
             "no-delete" => WriteNoDelete,
-            _ => throw new ArgumentException($"config.json: \"write\" must be \"modify\" or \"no-delete\", not \"{write}\""),
+            _ => throw new ArgumentException($"config.json: \"write\" must be \"modify\", \"no-delete\" or \"keep-folder\", not \"{write}\""),
         };
-        Standard = StandardFor(Write);
+        KeepFolder = write == "keep-folder";
+        Standard = StandardFor(Write, KeepFolder);
         hiddenAccounts = new HashSet<string>(hidden.Select(h => h.Trim()).Where(h => h != ""), StringComparer.OrdinalIgnoreCase);
     }
 
@@ -285,6 +296,11 @@ public sealed record Snapshot(
     Dictionary<string, User> Users, // key = DN
     string TakenAt = "")
 {
+    /// <summary>Folders whose inherited entries are not what their parent passes down (Rights.Stale); null = work them
+    /// out from the ACEs. The planner sets it for the snapshot after a change, where Windows works inheritance out anew
+    /// below every folder it writes.</summary>
+    public IReadOnlySet<string>? Stale { get; init; }
+
     public string NameOf(string dn)
     {
         if (Groups.TryGetValue(dn, out var g)) return g.Sam;

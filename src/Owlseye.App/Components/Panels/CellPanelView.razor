@@ -9,7 +9,7 @@
       @if (!info.Standard)
       {
         <text> The ACL entry is </text><b>@(Model.Entry ?? "special")</b><text>, not one of the standard entries. Choosing a right
-        replaces it with the standard entry (W = @(M.Write == M.Modify ? "Modify" : "write without delete")); the preview says
+        replaces it with the standard entry (W = @Labels.WriteText()); the preview says
         which rights that removes.</text>
       }
       break;

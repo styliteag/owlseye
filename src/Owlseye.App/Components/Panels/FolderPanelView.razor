@@ -21,11 +21,27 @@ else if (f.Level > 0)
     {
       <b>Inherits</b> <text>R and W from its parent folders.</text>
     }
+    @if (Model.Stale)
+    {
+      <br><span class="loss"><b>Its inherited entries are not what its parent passes down.</b></span>
+      <text> Probably moved here from another folder: Windows keeps the inherited entries of the old place, and the matrix shows
+        those. Re-apply inheritance to take the parent's again (also below it).</text>
+      @if (Model.Reinheriting)
+      {
+        <br><span class="pending-note">Re-apply pending. Preview to apply it.</span>
+      }
+    }
     @if (Model.Pending)
     {
       <br><span class="pending-note">Pending change. Preview to apply it.</span>
     }
   </p>
+}
+@if (Model.Stale && !Model.Clearing)
+{
+  <div class="choices">
+    <button class="@(Model.Reinheriting ? "" : "primary")" @onclick="() => OnReinherit.InvokeAsync()">@(Model.Reinheriting ? "Undo re-apply" : "Re-apply inheritance")</button>
+  </div>
 }
 @if (Model.CanToggle || Model.CanClear || Model.Clearing)
 {
@@ -141,6 +157,7 @@ else if (f.Level > 0)
   [Parameter] public EventCallback<bool> OnInheritance { get; set; }
 
   [Parameter] public EventCallback OnClear { get; set; }
+  [Parameter] public EventCallback OnReinherit { get; set; }
   /// <summary>Adds the new folder; false if it was refused (the name stays in the field).</summary>
   [Parameter] public Func<string, bool>? TryNewFolder { get; set; }
   [Parameter] public EventCallback<string> OnCancelNew { get; set; }

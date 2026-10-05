@@ -229,7 +229,7 @@ public static class Drift
         foreach (var (p, v) in r.Folders) folders[p] = snap.Folders[p] with { Protected = v };
         var principals = new Dictionary<string, Principal>(snap.Principals);
         foreach (var (k, v) in r.Extra) principals[k] = v;
-        var desired = snap with { Folders = folders, Principals = principals };
+        var desired = snap with { Folders = folders, Principals = principals, Stale = Rights.Stale(snap) };
         desired = Planner.WithCells(desired, r.Cells, new HashSet<string>());
         return Planner.ImpactOf(desired, snap);
     }

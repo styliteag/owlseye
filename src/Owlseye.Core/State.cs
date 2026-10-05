@@ -34,6 +34,7 @@ public sealed class State
     public OrderedDictionary<string, bool> PendingFolders { get; } = []; // path -> inheritance broken?
     public OrderedDictionary<string, string> PendingNew { get; } = []; // new folder -> parent folder
     public HashSet<string> PendingClear { get; } = []; // reset folder to the default (inherits, no own entries)
+    public HashSet<string> PendingReinherit { get; } = []; // write as it is: Windows takes the parent's inherited entries again
     public OrderedDictionary<string, Principal> Extra { get; private set; } = []; // columns for groups not yet in any ACL
 
     /// <summary>Builds a provider for another share path (local/windows); null = the share is fixed.</summary>
@@ -210,7 +211,7 @@ public sealed class State
                 return lp.Plan ?? throw new PlanError(lp.Error!.Message);
             try
             {
-                var plan = Planner.Build(Snap, Pending, PendingFolders, Cfg.MaxLevel, PendingNew, Extra, PendingClear, Cache);
+                var plan = Planner.Build(Snap, Pending, PendingFolders, Cfg.MaxLevel, PendingNew, Extra, PendingClear, Cache, PendingReinherit);
                 lastPlan = (Snap, key, plan, null);
                 return plan;
             }
@@ -233,6 +234,8 @@ public sealed class State
         foreach (var (p, v) in PendingNew) sb.Append(p).Append('\u0002').Append(v).Append('\u0001');
         sb.Append('\u0003');
         foreach (var p in PendingClear.Order(StringComparer.Ordinal)) sb.Append(p).Append('\u0001');
+        sb.Append('\u0002');
+        foreach (var p in PendingReinherit.Order(StringComparer.Ordinal)) sb.Append(p).Append('\u0001');
         sb.Append('\u0003');
         foreach (var (sid, p) in Extra) sb.Append(sid).Append('\u0002').Append(p.Name).Append('\u0002').Append(p.Kind).Append('\u0001');
         return sb.ToString();
@@ -251,7 +254,7 @@ public sealed class State
         }
     }
 
-    public int PendingCount => Pending.Count + PendingFolders.Count + PendingNew.Count + PendingClear.Count;
+    public int PendingCount => Pending.Count + PendingFolders.Count + PendingNew.Count + PendingClear.Count + PendingReinherit.Count;
 
     public void Clear()
     {
@@ -259,6 +262,7 @@ public sealed class State
         PendingFolders.Clear();
         PendingNew.Clear();
         PendingClear.Clear();
+        PendingReinherit.Clear();
         Extra.Clear();
     }
 
@@ -295,6 +299,7 @@ public sealed class State
         var depth = Cfg.MaxLevel;
         var odd = snap.Folders.Where(kv => kv.Value.Level > depth && Rights.Deviates(kv.Value)).Select(kv => kv.Key).ToHashSet();
         odd.UnionWith(PendingClear.Where(p => M.LevelOf(p) > depth)); // stay visible until applied
+        odd.UnionWith(Rights.Stale(snap).Where(p => M.LevelOf(p) > depth)); // moved folders: wrong rights, so shown
         var way = odd.SelectMany(M.Ancestors).Where(a => M.LevelOf(a) > depth).ToHashSet();
         way.ExceptWith(odd);
         return (odd, way);

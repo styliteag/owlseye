@@ -101,7 +101,7 @@ public sealed partial class Session(State st)
                 () => cols.Select(p => CellInfoOf(p.Sid, f.Path, cells, changes, blocked)).ToList(),
                 HashCode.Combine(byPath.GetValueOrDefault(f.Path), colHash),
                 St.PendingFolders.TryGetValue(f.Path, out var prot) ? prot : f.Protected,
-                St.PendingFolders.ContainsKey(f.Path) || St.PendingClear.Contains(f.Path),
+                St.PendingFolders.ContainsKey(f.Path) || St.PendingClear.Contains(f.Path) || St.PendingReinherit.Contains(f.Path),
                 newPaths.Contains(f.Path),
                 odd.Contains(f.Path) ? "odd" : way.Contains(f.Path) ? "way" : "",
                 parents.Contains(f.Path),
@@ -163,7 +163,9 @@ public sealed partial class Session(State st)
                     St.Pending.TryGetValue((sid, path), out var v) ? v : Rights.OwnerEntryOf(f, sid),
                     Rights.OwnerEntryOf(f, sid, inherited: true),
                     St.Pending.ContainsKey((sid, path))))],
-                !f.OtherAces && !St.PendingClear.Contains(path) && St.Snap.Folders.ContainsKey(path));
+                !f.OtherAces && !St.PendingClear.Contains(path) && St.Snap.Folders.ContainsKey(path),
+                Rights.Stale(St.Snap).Contains(path),
+                St.PendingReinherit.Contains(path));
         }
     }
 
@@ -286,6 +288,27 @@ public sealed partial class Session(State st)
                     if (had) St.PendingFolders[path] = prev;
                     else St.PendingFolders.Remove(path);
                 });
+            }
+        }
+        finally
+        {
+            St.NotifyChanged();
+        }
+    }
+
+    /// <summary>Re-apply inheritance on a moved folder (Rights.Stale): owlseye writes it as it is and Windows takes the
+    /// parent's inherited entries again, also below it; again = take back.</summary>
+    public void ReinheritFolder(string path)
+    {
+        try
+        {
+            lock (St.Lock)
+            {
+                if (St.PendingReinherit.Remove(path)) return;
+                if (!Rights.Stale(St.Snap).Contains(path))
+                    throw new UserError("This folder's inherited entries already are what its parent passes down");
+                St.PendingReinherit.Add(path);
+                CheckPlan(() => St.PendingReinherit.Remove(path));
             }
         }
         finally

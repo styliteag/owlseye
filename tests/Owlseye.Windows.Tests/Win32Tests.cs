@@ -180,6 +180,45 @@ public sealed class Win32Tests : IDisposable
         Assert.Equal("V", s.FolderPanel("C").OwnerEntries.Single(e => e.Sid == M.OwnerRights).Value);
     }
 
+    [Fact]
+    public void AMovedFolderIsFoundAndReapplyingInheritanceFixesIt()
+    {
+        Directory.CreateDirectory(Path.Combine(share, "A", "Moved")); // inherits Users R from A
+        Directory.Move(Path.Combine(share, "A", "Moved"), Path.Combine(share, "C", "Moved")); // C passes no Users entry down
+        var (st, s) = Client();
+        const string moved = @"C\Moved";
+        Assert.Contains(Fs().ReadDacl(moved).Aces, a => a.Sid == Users && (a.Flags & M.InheritedAce) != 0); // Windows kept it
+        Assert.Equal([moved], Rights.Stale(st.Snap));
+        Assert.Equal("R", st.Cells[(Users, moved)].Effective); // what Windows applies there, not what C passes down
+
+        s.ReinheritFolder(moved);
+        var o = Apply(s);
+        Assert.False(o.Error, o.Message);
+        Assert.DoesNotContain(Fs().ReadDacl(moved).Aces, a => a.Sid == Users);
+        Assert.Empty(Rights.Stale(st.Snap));
+        Assert.False(st.Cells.ContainsKey((Users, moved)));
+    }
+
+    [Fact]
+    public void KeepFolderWritesTwoEntries()
+    {
+        M.Configure("keep-folder", []);
+        try
+        {
+            var (_, s) = Client();
+            s.SetCell(Users, "C", "W");
+            var o = Apply(s);
+            Assert.False(o.Error, o.Message);
+            var mine = Fs().ReadDacl("C").Aces.Where(a => a.Sid == Users && (a.Flags & M.InheritedAce) == 0).Select(a => (a.Mask, a.Flags)).Order().ToList();
+            Assert.Equal(new[] { (M.WriteNoDelete, M.ThisFolder), (M.Modify, M.OiCi | M.InheritOnly) }.Order(), mine);
+            Assert.True(s.Matrix().Rows.Single(r => r.Folder.Path == "C").Cells.Single(c => c.Value == "W").Standard);
+        }
+        finally
+        {
+            M.Configure("modify", []);
+        }
+    }
+
     static void Junction(string link, string target)
     {
         var p = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"") { CreateNoWindow = true, UseShellExecute = false })!;

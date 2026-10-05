@@ -26,7 +26,7 @@
   <label class="showhidden" title="SYSTEM, Administrators, Domain Admins and the accounts hidden in the settings as columns you can set. Findings and the desired state leave them out either way. Remembered for you.">
     <input type="checkbox" checked="@M.ShowHidden" @onchange="OnShowHidden"> Hidden accounts</label>
   <div class="legend">
-    <span class="c W">W</span> @(M.Write == M.Modify ? "Modify" : "Write (no delete)")
+    <span class="c W">W</span> @Labels.WriteText()
     <span class="c R">R</span> Read
     <span class="c F">F</span> full control
     <span class="c RL">R|</span> list this folder only
@@ -96,7 +96,7 @@
         <CellPanelView Model="cellPanel" OnSetRight="SetFromPanel" OnInheritance="InheritanceFromCell" />
         break;
       case "folder" when folderPanel is not null:
-        <FolderPanelView Model="folderPanel" OnInheritance="InheritanceFromFolder" OnClear="ClearFolder" TryNewFolder="NewFolder" OnCancelNew="CancelNew" OnOwnerEntry="OwnerEntry" />
+        <FolderPanelView Model="folderPanel" OnInheritance="InheritanceFromFolder" OnClear="ClearFolder" TryNewFolder="NewFolder" OnCancelNew="CancelNew" OnOwnerEntry="OwnerEntry" OnReinherit="Reinherit" />
         break;
       case "groups" when groupsPanel is not null:
         <GroupsPanelView Model="groupsPanel" OnSearch="SearchGroups" OnAdd="AddColumn" />
@@ -231,6 +231,8 @@
   void InheritanceFromFolder(bool inherit) => Act(() => S.SetInheritance(panelPath, inherit));
 
   void ClearFolder() => Act(() => S.ClearFolder(panelPath));
+
+  void Reinherit() => Act(() => S.ReinheritFolder(panelPath));
 
   void OwnerEntry((string Sid, string? Value) e) => Act(() => S.SetOwnerEntry(e.Sid, panelPath, e.Value));
 

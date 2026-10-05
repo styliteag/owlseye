@@ -21,7 +21,8 @@ public sealed record AclOp(
     IReadOnlyList<Ace> After, // explicit ACEs after
     IReadOnlyList<Change> Changes,
     bool NewFolder = false,
-    bool Cleared = false); // default restored: inherits, no own entries
+    bool Cleared = false, // default restored: inherits, no own entries
+    bool Reinherited = false); // written as it is, so Windows works its inherited entries out anew (a moved folder)
 
 public sealed record Impact(string User, string Display, string Path, string? Before, string? After);
 
@@ -155,7 +156,8 @@ public static class Planner
         IReadOnlyDictionary<string, string>? newFolders = null,
         IReadOnlyDictionary<string, Principal>? extra = null,
         IEnumerable<string>? clearIn = null,
-        RightsCache? cache = null)
+        RightsCache? cache = null,
+        IEnumerable<string>? reinheritIn = null)
     {
         if (cache is not null && !ReferenceEquals(cache.Snap, snap)) cache = null;
         List<string> createOps;
@@ -189,7 +191,15 @@ public static class Planner
         var touched = Protect(snap, workFolders, folders, createOps);
         touched.UnionWith(createOps);
         touched.UnionWith(clear);
-        var work = snap with { Folders = workFolders, Principals = principals };
+        var stale0 = Rights.Stale(snap);
+        var work = snap with { Folders = workFolders, Principals = principals, Stale = stale0 };
+        // re-apply inheritance: write the folder as it is, Windows then takes the parent's entries again (a clear or a
+        // change of inheritance on the same folder writes it anyway)
+        var reinherit = (reinheritIn ?? []).Where(p => !clear.Contains(p) && !folders.ContainsKey(p)).ToHashSet();
+        foreach (var path in reinherit)
+            if (!snap.Folders.TryGetValue(path, out var f) || f.Parent is null || f.Protected || f.OtherAces)
+                throw new PlanError($"Inheritance can only be re-applied on existing folders below the root that inherit: {Msg.Quote(path)}");
+        touched.UnionWith(reinherit);
 
         var required = Rights.RequiredFullControl(work);
         foreach (var ((sid, path), v) in changes)
@@ -256,7 +266,7 @@ public static class Planner
             IReadOnlyList<Ace> b = f0 is not null ? f0.Explicit : [];
             var a = f1.Explicit;
             var prot0 = f0?.Protected ?? false;
-            if (prot0 == f1.Protected && Acl.SameKeys(b, a)) continue; // also new folders without own entries: creating is enough
+            if (prot0 == f1.Protected && Acl.SameKeys(b, a) && !reinherit.Contains(path)) continue; // also new folders without own entries: creating is enough
             var sids = old.Keys.Where(k => k.Path == path).Select(k => k.Sid)
                 .Union(newCells.Keys.Where(k => k.Path == path).Select(k => k.Sid))
                 .OrderBy(s => principals.TryGetValue(s, out var p) ? M.Lower(p.Short) : s, M.Ci);
@@ -277,8 +287,21 @@ public static class Planner
                 var o1 = Rights.OwnerEntryOf(f1, osid);
                 if (o0 != o1) ch.Add(new Change(osid, M.OwnerEntryName(osid), path, o0, o1));
             }
-            ops.Add(new AclOp(path, prot0, f1.Protected, b, a, ch, f0 is null, clear.Contains(path)));
+            ops.Add(new AclOp(path, prot0, f1.Protected, b, a, ch, f0 is null, clear.Contains(path), reinherit.Contains(path)));
         }
+        // Windows works inheritance out anew for every folder it writes and everything below it, up to folders with broken
+        // inheritance: that ends a moved folder's leftovers too
+        var written = ops.Select(o => o.Path).ToHashSet();
+        bool Fixed(string p)
+        {
+            if (!final.Folders.TryGetValue(p, out var f) || f.Protected) return true;
+            for (var cur = f; ; cur = final.Folders[cur.Parent])
+            {
+                if (written.Contains(cur.Path)) return true;
+                if (cur.Parent is null || (cur.Protected && cur.Path != p)) return false;
+            }
+        }
+        final = final with { Stale = stale0.Where(p => !Fixed(p)).ToHashSet() };
         var cellsAfter = Rights.Matrix(final);
         return new Plan
         {

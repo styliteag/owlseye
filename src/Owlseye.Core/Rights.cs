@@ -111,9 +111,8 @@ public static class Rights
         IReadOnlyList<Ace> pool = inheritable.Count > 0 ? inheritable : aces;
         var write = pool.Any(a => (a.Mask & WriteBits) != 0);
         var value = IsFullControl(aces) ? "F" : inheritable.Count > 0 ? (write ? "W" : "R") : (write ? "W|" : "R|");
-        var a0 = aces[0];
-        var std = M.Standard[value];
-        return (value, aces.Count == 1 && a0.Mask == std.Mask && (a0.Flags & ~0x10) == std.Flags);
+        var std = M.StandardAces(value).Select(s => (s.Mask, s.Flags)).Order().ToList();
+        return (value, aces.Select(a => (a.Mask, a.Flags & ~M.InheritedAce)).Order().SequenceEqual(std));
     }
 
     /// <summary>The accounts of config.json "full_control" (default SYSTEM, Administrators) as they appear in this
@@ -211,11 +210,14 @@ public static class Rights
     }
 
     /// <summary>sid -> inheritable right that the root inherits from above the share.</summary>
-    public static Dictionary<string, string> Outer(Snapshot snap)
+    public static Dictionary<string, string> Outer(Snapshot snap) =>
+        snap.Folders.TryGetValue("", out var root) && !root.Protected ? InheritedRights(root) : [];
+
+    /// <summary>sid -> inheritable right from the folder's inherited entries as they are stored.</summary>
+    static Dictionary<string, string> InheritedRights(Folder f)
     {
-        if (!snap.Folders.TryGetValue("", out var root) || root.Protected) return [];
         var by = new Dictionary<string, List<Ace>>();
-        foreach (var a in root.Aces)
+        foreach (var a in f.Aces)
             if (a.Inherited && a.Allow && !M.Hides(a.Sid, a.Name) && (a.Flags & M.OiCi) != 0)
             {
                 if (!by.TryGetValue(a.Sid, out var l)) by[a.Sid] = l = [];
@@ -240,12 +242,15 @@ public static class Rights
         var passes = new Dictionary<string, Dictionary<string, (string V, string Src)>>();
         var o = new Dictionary<(string, string), Cell>();
         Dictionary<string, (string, string)>? outer = null;
+        var stale = Stale(snap);
         foreach (var f in snap.Folders.Values.OrderBy(f => f.Level))
         {
             Dictionary<string, (string V, string Src)> incoming;
             if (f.Protected) incoming = [];
             else if (f.Parent is null)
                 incoming = outer ??= Outer(snap).ToDictionary(kv => kv.Key, kv => (kv.Value, Above));
+            else if (stale.Contains(f.Path)) // moved here: Windows applies what it brought along, not the parent's
+                incoming = InheritedRights(f).ToDictionary(kv => kv.Key, kv => (kv.Value, LeftOver(f.Path)));
             else incoming = passes.GetValueOrDefault(f.Parent) ?? [];
             var mine = own.GetValueOrDefault(f.Path) ?? [];
             var passing = new Dictionary<string, (string V, string Src)>(incoming);
@@ -317,9 +322,56 @@ public static class Rights
     }
 
     /// <summary>Does the folder have something of its own (entries, broken inheritance, read error)? Below the
-    /// matrix depth this is a deviation and is shown; folders that only inherit are not.</summary>
+    /// matrix depth this is a deviation and is shown; folders that only inherit are not (Stale ones are shown too).</summary>
     public static bool Deviates(Folder f) =>
         f.Protected || f.Error != "" || f.OtherAces || f.Explicit.Any(a => !M.IsHidden(a.Sid, a.Name));
+
+    // --- Stale inheritance (moved folders) --------------------------------------------------------
+
+    /// <summary>Source of a right that a moved folder still carries from its old place (see Stale).</summary>
+    public static string LeftOver(string path) => $"{(path != "" ? path : "root")} (left over from a move)";
+
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Snapshot, IReadOnlySet<string>> staleCache = new();
+
+    /// <summary>Folders whose inherited entries are not what their parent folder passes down. A folder moved within the
+    /// volume keeps the inherited entries of its old place until it or a folder above it is written; Windows then works
+    /// inheritance out anew. Snapshot.Stale overrides the detection (the planner's snapshot after a change).</summary>
+    public static IReadOnlySet<string> Stale(Snapshot snap) => snap.Stale ?? staleCache.GetValue(snap, DetectStale);
+
+    static IReadOnlySet<string> DetectStale(Snapshot snap)
+    {
+        var o = new HashSet<string>();
+        foreach (var f in snap.Folders.Values)
+        {
+            // no inherited entries at all: nothing to compare (a moved folder brings the ones of its old place along)
+            if (f.Protected || f.Parent is null || f.Error != "" || f.OtherAces || !f.Aces.Any(a => a.Inherited)) continue;
+            if (snap.Folders.TryGetValue(f.Parent, out var parent) && parent.Error == "" && !parent.OtherAces && !SameInherited(parent, f))
+                o.Add(f.Path);
+        }
+        return o;
+    }
+
+    /// <summary>Per account and allow/deny, the rights that apply to the folder itself: what the parent's
+    /// container-inherit entries give against the folder's inherited entries (generic rights mapped, SYNCHRONIZE
+    /// ignored). Creator Owner and Creator Group are left out; the entry Creator Owner turns into for the folder's owner
+    /// (who is not read) may be there once.</summary>
+    static bool SameInherited(Folder parent, Folder f)
+    {
+        static bool Creator(string sid) => sid is M.CreatorOwner or "S-1-3-1";
+        static uint Norm(uint mask) => M.MapGeneric(mask) & ~M.Synchronize;
+        var want = new Dictionary<(string, bool), uint>();
+        uint? owner = null;
+        foreach (var a in parent.Aces.Where(a => (a.Flags & M.ContainerInherit) != 0))
+            if (a.Sid == M.CreatorOwner && a.Allow) owner = (owner ?? 0) | Norm(a.Mask);
+            else if (!Creator(a.Sid)) want[(a.Sid, a.Allow)] = want.GetValueOrDefault((a.Sid, a.Allow)) | Norm(a.Mask);
+        var have = new Dictionary<(string, bool), uint>();
+        foreach (var a in f.Aces.Where(a => a.Inherited && (a.Flags & M.InheritOnly) == 0 && !Creator(a.Sid)))
+            have[(a.Sid, a.Allow)] = have.GetValueOrDefault((a.Sid, a.Allow)) | Norm(a.Mask);
+        foreach (var (k, v) in want)
+            if (have.GetValueOrDefault(k) != v) return false;
+        var rest = have.Where(kv => !want.ContainsKey(kv.Key)).ToList();
+        return rest.Count == 0 || (rest.Count == 1 && rest[0].Key.Item2 && owner == rest[0].Value);
+    }
 
     /// <summary>user_dn -> {path: strongest effective right} (folders with access, up to maxLevel; null = all).</summary>
     public static Dictionary<string, Dictionary<string, string>> UserRights(Snapshot snap, int? maxLevel = null,
@@ -439,6 +491,7 @@ public static class Rights
     public static List<Finding> Findings(Snapshot snap, int maxLevel = 3, Dictionary<(string Sid, string Path), Cell>? cells = null)
     {
         var required = RequiredFullControl(snap);
+        var stale = Stale(snap);
         cells ??= Matrix(snap);
         var o = new List<Finding>();
         foreach (var (path, f) in snap.Folders.OrderBy(kv => kv.Key, StringComparer.Ordinal))
@@ -447,6 +500,8 @@ public static class Rights
             if (M.SuspiciousName(f.Name))
                 o.Add(new("medium", path, "Name has invisible, combining or mixed-script characters (lookalike?)"));
             if (f.Protected && f.Level > maxLevel) o.Add(new("medium", path, $"Inheritance broken below level {maxLevel}"));
+            if (stale.Contains(path))
+                o.Add(new("medium", path, "Inherited entries are not what the parent folder passes down (moved here?): re-apply inheritance in the folder panel"));
             // own entries; on the root also what it inherits from above the share (the drive often has it)
             if (CreatorOwnerOf(f) == "F" || (f.Level == 0 && !f.Protected && CreatorOwnerOf(f, inherited: true) == "F"))
                 o.Add(new("medium", path, "Creator Owner has full control: whoever creates something here gets personal full control of it, outside the groups and the matrix, and keeps it after leaving them"));
