@@ -7,7 +7,7 @@
 
 namespace Owlseye;
 
-/// <param name="Full">the entry is full control (shown as F; for the rights computation it counts as W)</param>
+/// <param name="Full">the entry is full control (value F, passed down like R and W)</param>
 public sealed record Explicit(string Value, bool Standard, bool Full = false);
 
 public sealed record Cell(string? Direct, string? Effective, string? Source, bool Standard = true, bool Full = false);

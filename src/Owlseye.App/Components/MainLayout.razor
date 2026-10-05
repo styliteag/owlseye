@@ -98,7 +98,7 @@ else
     Ui.ResetMatrix();
   }
 
-  /// <summary>Like the &lt;title&gt; blocks of the web version.</summary>
+  /// <summary>The page's name in the window title.</summary>
   void UpdatePageTitle()
   {
     var title = PagePath switch
@@ -111,6 +111,8 @@ else
       "audit" => "Log",
       "report" => "Report",
       "share" => "Share",
+      "groups" => "Groups",
+      "settings" => "Settings",
       "folder" => FolderName(),
       _ => "owlseye",
     };

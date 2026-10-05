@@ -1,9 +1,12 @@
 # ADR 0001: Native Windows app in C# (.NET 10, WPF + Blazor Hybrid)
 
-- Status: accepted, implemented on branch `csharp-port` (2026-10-04)
+- Status: accepted, implemented (2026-10-04)
 - Date: 2026-10-04
 - Deciders: Wim Bonis
-- Feature scope of the port: [port-spec.md](../port-spec.md)
+- Requirements: [spec.md](../spec.md)
+
+> A record of the decision as it was taken. The Python/Electron proof of concept it describes was removed after the
+> port and is not part of this repository; the current behaviour is in the README and the spec.
 
 ## Context
 

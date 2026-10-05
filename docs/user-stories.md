@@ -1,7 +1,7 @@
 # owlseye user stories
 
 What owlseye does for the people who use it, as user stories with acceptance criteria. The numbered requirements
-behind them (F-…, S-…, D-…, N-…) are in [port-spec.md](port-spec.md); the decision for the native app is
+behind them (F-…, S-…, D-…, N-…) are in [spec.md](spec.md); the decision for the native app is
 [ADR 0001](adr/0001-native-windows-app-in-csharp.md). Screenshots are made with `node tools/screenshots.mjs` from the
 demo data.
 
@@ -263,5 +263,5 @@ own account: no service account, no stored password.
 
 ## Not covered yet
 
-- Running against a real domain is not verified yet (lab test pending; see the README).
+- Writing against a real domain is not tested in a lab yet (see the README).
 - The exe is not signed.
