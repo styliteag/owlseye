@@ -93,6 +93,8 @@ table.matrix th.gcol { height: 130px; width: 34px; min-width: 34px; max-width: 3
 table.matrix th.gcol > div { width: 34px; transform: translate(17px, -8px) rotate(-50deg); transform-origin: bottom left; }
 table.matrix th.gcol span { display: inline-block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 table.matrix th.gcol { overflow: visible; }
+table.matrix th.gcol.hiddenacct span { font-style: italic; color: var(--muted); }
+.toolbar label.showhidden { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 table.matrix th.folder { position: sticky; left: 0; background: var(--panel); z-index: 1; text-align: left; white-space: nowrap;
                          padding: 2px 8px 2px calc(4px + (var(--lvl) - 1) * 16px); font-weight: 400; }
 table.matrix th.folder.l1 { font-weight: 600; }

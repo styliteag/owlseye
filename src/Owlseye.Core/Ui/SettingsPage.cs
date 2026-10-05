@@ -104,8 +104,8 @@ public sealed partial class Session
         xs.SelectMany(x => x.Split('\n')).Select(x => x.Trim()).Where(x => x != "").Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
     /// <summary>Saves the settings (shared ones to the state folder, where that is to config.json), applies them at
-    /// once and logs old and new values. Only a new scan depth or other hidden accounts read the share again; W, full
-    /// control and the state folder are worked out from the last scan.</summary>
+    /// once and logs old and new values. Only a new scan depth reads the share again; W, hidden and full-control accounts
+    /// and the state folder are worked out from the last scan.</summary>
     public Outcome SaveSettings(SettingsInput input, string reason)
     {
         string message;
@@ -200,10 +200,10 @@ public sealed partial class Session
             });
             if (changes.ContainsKey("scan_depth") && St.OpenShare is not null && St.Ready)
                 St.Switch(St.OpenShare(St.Provider.Share)); // a provider with the new depth, scanned anew
-            else if (changes.ContainsKey("hidden") || !St.Ready)
-                St.Rescan(); // the scan leaves out hidden accounts (no column, no members read)
+            else if (!St.Ready)
+                St.Rescan();
             else
-                St.Rescan(St.Snap); // W, full control and the state folder: worked out again from the last scan
+                St.Rescan(St.Snap); // W, hidden and full-control accounts, the state folder: worked out from the last scan
             message = (adopted ? $"Now using the state folder {next.StateDir} and its settings (those of the admins who use it)."
                     : $"Settings saved to {next.SharedFile}.")
                 + (changes.ContainsKey("scan_depth") && St.OpenShare is null ? " The scan depth applies at the next start." : "")

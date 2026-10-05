@@ -94,6 +94,16 @@ public static class M
         return name is not null && (hiddenAccounts.Contains(name) || hiddenAccounts.Contains(name[(name.LastIndexOf('\\') + 1)..]));
     }
 
+    /// <summary>The matrix shows the hidden accounts too (switch "Hidden accounts" in the matrix, remembered per admin):
+    /// they are columns and can be set like any other account. Findings and the desired-state comparison leave them
+    /// out either way (IsHidden).</summary>
+    public static bool ShowHidden { get; set; }
+
+    /// <summary>Not a matrix column right now: a hidden account while the matrix does not show them, or Creator Owner and
+    /// Owner Rights, which stand for whoever owns a file and are never columns.</summary>
+    public static bool Hides(string sid, string? name = null) =>
+        sid is CreatorOwner or OwnerRights || (!ShowHidden && IsHidden(sid, name));
+
     /// <summary>Not in the matrix. owlseye sets SYSTEM and Administrators itself on protected folders (full control).</summary>
     public static readonly IReadOnlySet<string> Hidden = new HashSet<string> { System, Admins, CreatorOwner, OwnerRights };
 

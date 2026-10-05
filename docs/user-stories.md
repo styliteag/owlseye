@@ -21,7 +21,9 @@ own account: no service account, no stored password.
 ![Matrix with the panel of an inherited right](screenshots/matrix.png)
 
 - Rows are the folders as a tree (root, levels down to the chosen depth); columns are the accounts in the ACLs, without
-  SYSTEM, Administrators and Creator Owner (F-M1, F-M3).
+  SYSTEM, Administrators, Creator Owner and Domain Admins (F-M1, F-M3).
+- "Hidden accounts" shows SYSTEM, Administrators, Domain Admins and the accounts hidden in the settings as columns
+  that can be set too; remembered per admin, no new scan (F-M11).
 - A cell shows `R`, `W`, `R|`, `W|` (own entry), a dashed value (inherited), `⊘` (blocked by broken inheritance) or
   `*` (an entry that is not one of the standard entries), `F` for full control (F-M5).
 - Top-level folders can be collapsed, columns filtered by name (F-M4, F-M6).

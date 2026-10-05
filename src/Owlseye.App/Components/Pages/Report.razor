@@ -52,8 +52,9 @@
     <p class="small muted">Rights: <b>W</b> @(M.Write == M.Modify ? "modify (read, write and delete)" : "read and write (no delete)"),
       <b>R</b> read (this folder and everything below), <b>W|</b> / <b>R|</b> this folder only; <span class="inh">(W)</span> inherited
       from a parent folder; <b>F</b> full control; <b>*</b> another special entry (not one of the standard entries);
-      ⛔ inheritance broken. SYSTEM, Administrators, Creator Owner, Domain Admins and the accounts hidden in config.json are
-      not listed.</p>
+      ⛔ inheritance broken. @(M.ShowHidden
+        ? "SYSTEM, Administrators, Domain Admins and the accounts hidden in the settings are listed (the matrix shows them); Creator Owner is not."
+        : "SYSTEM, Administrators, Creator Owner, Domain Admins and the accounts hidden in the settings are not listed.")</p>
   </section>
 
   <section>

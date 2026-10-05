@@ -122,6 +122,14 @@ try {
     await click('main table a');
     await until(`location.pathname === '/folder' && document.querySelector('main h1')`, 'folder page');
   });
+  await step('the matrix shows the hidden accounts on request', async () => {
+    await click(`nav a[href='/matrix']`);
+    await until(`location.pathname === '/matrix' && !!document.querySelector('.toolbar label.showhidden input')`, 'matrix');
+    await click('.toolbar label.showhidden input');
+    await until(`[...document.querySelectorAll('#grid th.gcol.hiddenacct')].some(th => th.innerText.trim() === 'SYSTEM')`, 'SYSTEM column');
+    await click('.toolbar label.showhidden input');
+    await until(`!!document.querySelector('#grid th.gcol') && !document.querySelector('#grid th.gcol.hiddenacct')`, 'hidden columns gone');
+  });
   await step('no error boundary was hit', async () => {
     const err = await js(`document.body.innerText.includes('Something went wrong')`);
     if (err) throw new Error('error boundary shown');

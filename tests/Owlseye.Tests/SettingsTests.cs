@@ -10,7 +10,11 @@ namespace Owlseye.Tests;
 [Collection(nameof(GlobalRightsSettings))]
 public sealed class SettingsTests : TestBase, IDisposable
 {
-    void IDisposable.Dispose() => M.Configure("modify", []);
+    void IDisposable.Dispose()
+    {
+        M.ShowHidden = false;
+        M.Configure("modify", []);
+    }
 
     const string DomainAdmins = "S-1-5-21-1-2-3-512"; // the demo domain is S-1-5-21-1-2-3
 
@@ -78,7 +82,7 @@ public sealed class SettingsTests : TestBase, IDisposable
     }
 
     [Fact]
-    public void OnlyScanDepthAndHiddenAccountsReadTheShareAgain()
+    public void OnlyTheScanDepthReadsTheShareAgain()
     {
         var (st, s) = Client();
         var snap = st.Snap;
@@ -91,7 +95,7 @@ public sealed class SettingsTests : TestBase, IDisposable
         Assert.Contains(after, a => a.Sid == Demo.Gsid("G-IT") && a.Mask == M.WriteNoDelete);
         s.Discard();
         Assert.False(s.SaveSettings(new SettingsInput(st.Cfg.ScanDepth, "no-delete", ["DEMO\\G-IT"], ["SYSTEM", "Domain Admins"], ""), "").Error);
-        Assert.NotSame(snap, st.Snap); // the scan leaves hidden accounts out
+        Assert.Same(snap, st.Snap); // the scan reads hidden accounts too
         Assert.DoesNotContain(s.Matrix().Columns, c => c.Short == "G-IT");
     }
 

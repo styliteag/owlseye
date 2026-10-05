@@ -175,13 +175,13 @@ public static class Rights
     public static bool HasFullControl(IEnumerable<Ace> aces, string sid) =>
         IsFullControl(aces.Where(a => a.Allow && a.Sid == sid).ToList());
 
-    /// <summary>(sid, path) -> explicit entry. Only Allow ACEs, without the hidden accounts (SYSTEM, Administrators, …).</summary>
+    /// <summary>(sid, path) -> explicit entry. Only Allow ACEs, without the accounts the matrix hides (M.Hides).</summary>
     public static Dictionary<(string Sid, string Path), Explicit> ExplicitCells(Snapshot snap)
     {
         var by = new Dictionary<(string, string), List<Ace>>();
         foreach (var (path, f) in snap.Folders)
             foreach (var a in f.Explicit)
-                if (a.Allow && !M.IsHidden(a.Sid, a.Name))
+                if (a.Allow && !M.Hides(a.Sid, a.Name))
                 {
                     if (!by.TryGetValue((a.Sid, path), out var l)) by[(a.Sid, path)] = l = [];
                     l.Add(a);
@@ -201,7 +201,7 @@ public static class Rights
         if (!snap.Folders.TryGetValue("", out var root) || root.Protected) return [];
         var by = new Dictionary<string, List<Ace>>();
         foreach (var a in root.Aces)
-            if (a.Inherited && a.Allow && !M.IsHidden(a.Sid, a.Name) && (a.Flags & M.OiCi) != 0)
+            if (a.Inherited && a.Allow && !M.Hides(a.Sid, a.Name) && (a.Flags & M.OiCi) != 0)
             {
                 if (!by.TryGetValue(a.Sid, out var l)) by[a.Sid] = l = [];
                 l.Add(a);
@@ -330,6 +330,8 @@ public static class Rights
         return o;
     }
 
+    static bool HiddenSid(Snapshot snap, string sid) => M.IsHidden(sid, snap.Principals.GetValueOrDefault(sid)?.Name);
+
     static string ShortOf(Snapshot snap, string sid) => snap.Principals.TryGetValue(sid, out var p) ? p.Short : sid;
 
     /// <summary>Through which accounts a user reaches `path`.</summary>
@@ -448,12 +450,13 @@ public static class Rights
                     o.Add(new("low", path, $"Entry for {a.Name} applies to nothing"));
             }
         }
-        foreach (var ((sid, path), c) in cells)
+        // hidden accounts shown in the matrix (M.ShowHidden) are no findings: their full control is the point
+        foreach (var ((sid, path), c) in cells.Where(kv => !HiddenSid(snap, kv.Key.Sid)))
             if (c.Direct is not null && !c.Standard && snap.Folders[path].Level <= maxLevel)
                 o.Add(new("low", path, $"Non-standard entry for {ShortOf(snap, sid)} (shown as {c.Direct})"));
             else if (c.Direct == "F" && snap.Folders[path].Level <= maxLevel)
                 o.Add(new("low", path, $"Full control for {ShortOf(snap, sid)}: its members can change permissions and take ownership"));
-        foreach (var ((sid, anc), below) in Unreachable(snap, cells, maxLevel))
+        foreach (var ((sid, anc), below) in Unreachable(snap, cells, maxLevel).Where(kv => !HiddenSid(snap, kv.Key.Sid)))
             o.Add(new("medium", anc, $"{ShortOf(snap, sid)} cannot open this folder to reach {below[0]} (R| missing)"));
         return o.OrderBy(x => SevRank[x.Severity]).ThenBy(x => M.Lower(x.Path), M.Ci).ThenBy(x => x.Text, M.Ci).ToList();
     }

@@ -300,13 +300,14 @@ public class AdProvider : IProvider
         return o;
     }
 
-    /// <summary>All accounts in the ACLs (explicit, and what the root inherits from above), without SYSTEM etc.</summary>
+    /// <summary>All accounts in the ACLs (explicit, and what the root inherits from above), the hidden ones too (the matrix
+    /// can show them, M.ShowHidden); not Creator Owner and Owner Rights.</summary>
     Dictionary<string, Principal> Principals(Dictionary<string, Folder> folders)
     {
         var found = new Dictionary<string, Ace>();
         foreach (var f in folders.Values)
             foreach (var a in f.Aces)
-                if ((!a.Inherited || f.Level == 0) && !M.IsHidden(a.Sid, a.Name))
+                if ((!a.Inherited || f.Level == 0) && a.Sid is not (M.CreatorOwner or M.OwnerRights))
                     found[a.Sid] = a;
         var rows = Search(found.Keys.Order(StringComparer.Ordinal).Where(s => s.StartsWith("S-1-5-21-"))
             .Select(s => $"(objectSid={LdapEscape(s)})").ToList(), ["distinguishedName", "objectSid"]);
@@ -390,7 +391,7 @@ public class AdProvider : IProvider
         foreach (var r in rows.OrderBy(r => M.Lower(r.S("sAMAccountName") ?? ""), M.Ci).Take(50))
         {
             var sid = r.Bytes("objectSid") is { } b ? SidFromBytes(b) : "";
-            if (sid != "" && !M.IsHidden(sid, r.S("sAMAccountName")))
+            if (sid != "" && !M.Hides(sid, r.S("sAMAccountName")))
             {
                 var (name, kind) = Lookup(sid);
                 o.Add(new Principal(sid, name, kind, r.S("distinguishedName") ?? ""));

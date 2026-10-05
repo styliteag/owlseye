@@ -51,7 +51,7 @@
       <textarea rows="3" @bind="hidden" placeholder="CORP\backup"></textarea></label>
     <AccountPicker OnPick="@(v => hidden = AddLine(hidden, v))" />
     <p class="muted small">One per line, SID or name. SYSTEM, Administrators, Creator Owner, Domain Admins and Enterprise
-      Admins are always hidden.</p>
+      Admins are hidden anyway. "Hidden accounts" above the matrix shows them (except Creator Owner) as columns you can set.</p>
   </section>
 
   <section>

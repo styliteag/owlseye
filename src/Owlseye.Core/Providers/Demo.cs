@@ -158,7 +158,7 @@ public static class Demo
         var o = new Dictionary<string, Principal>();
         foreach (var f in snap.Folders.Values)
             foreach (var a in f.Aces)
-                if (!M.IsHidden(a.Sid, a.Name) && (!a.Inherited || f.Level == 0))
+                if (a.Sid is not (M.CreatorOwner or M.OwnerRights) && (!a.Inherited || f.Level == 0))
                 {
                     var (name, kind) = names.TryGetValue(a.Sid, out var n) ? n : (a.Sid, "unknown");
                     o[a.Sid] = new Principal(a.Sid, name, kind, dns.GetValueOrDefault(a.Sid, ""));

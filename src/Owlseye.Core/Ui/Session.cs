@@ -311,6 +311,22 @@ public sealed partial class Session(State st)
         St.SetDepth(depth);
     }
 
+    /// <summary>Shows the hidden accounts (SYSTEM, Administrators, Domain Admins, those hidden in the settings) as matrix
+    /// columns that can be set, or hides them again; remembered for this admin. Worked out from the last scan.</summary>
+    public void SetShowHidden(bool show)
+    {
+        lock (St.Lock)
+        {
+            if (M.ShowHidden == show) return;
+            var principals = St.Principals();
+            if (!show && St.Pending.Keys.Any(k => M.IsHidden(k.Sid, principals.GetValueOrDefault(k.Sid)?.Name)))
+                throw new UserError("Apply or discard the pending changes of hidden accounts first");
+            M.ShowHidden = show;
+            Settings.Save(new JsonObject { ["show_hidden"] = show });
+            if (St.Ready) St.Rescan(St.Snap);
+        }
+    }
+
     public void Discard()
     {
         lock (St.Lock) St.Clear();

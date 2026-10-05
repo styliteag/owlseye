@@ -140,6 +140,9 @@ public static class Settings
 
     public static int? Depth() => (int?)Load().Long("depth");
 
+    /// <summary>The matrix showed the hidden accounts when this admin last used it (M.ShowHidden).</summary>
+    public static bool ShowHidden() => Load().Bool("show_hidden") == true;
+
     /// <summary>Last share opened with this provider (local/windows); "" if none.</summary>
     public static string LastShare(string kind) => Load().Str($"share_{kind}") ?? "";
 

@@ -38,7 +38,8 @@ public class AclModelTests : TestBase
     {
         var names = snap.Principals.Values.Select(p => p.Short).ToHashSet();
         Assert.Superset(new HashSet<string> { "G-Management", "G-AllUsers", "P-Payroll", "mmoore", "Authenticated Users" }, names);
-        Assert.False(new HashSet<string> { "SYSTEM", "Administrators" }.Overlaps(names));
+        Assert.Superset(new HashSet<string> { "SYSTEM", "Administrators" }, names); // read too: the matrix can show them
+        Assert.DoesNotContain(Rights.Matrix(snap).Keys, k => k.Sid is M.System or M.Admins); // no columns by default
     }
 
     [Fact]

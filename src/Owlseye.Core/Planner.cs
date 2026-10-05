@@ -187,13 +187,21 @@ public static class Planner
         touched.UnionWith(clear);
         var work = snap with { Folders = workFolders, Principals = principals };
 
+        var required = Rights.RequiredFullControl(work);
         foreach (var ((sid, path), v) in changes)
         {
-            if (M.IsHidden(sid))
-                throw new PlanError("SYSTEM, Administrators, Creator Owner, Domain Admins and the accounts hidden in "
-                    + "config.json are not set in the matrix");
+            if (sid is M.CreatorOwner or M.OwnerRights) throw new PlanError("Creator Owner and Owner Rights are not set in the matrix");
+            if (M.Hides(sid, principals.GetValueOrDefault(sid)?.Name))
+                throw new PlanError("SYSTEM, Administrators, Domain Admins and the other hidden accounts can be set only "
+                    + "while the matrix shows them (\"Hidden accounts\" above the matrix)");
             if (!principals.ContainsKey(sid)) throw new PlanError($"Unknown account {sid}");
             if (!work.Folders.TryGetValue(path, out var f)) throw new PlanError($"Unknown folder {Msg.Quote(path)}");
+            // what EnsureAdmins would add again: a full-control account keeps full control on the root (unless inherited)
+            // and on folders with broken inheritance
+            if (v != "F" && required.Any(p => p.Sid == sid)
+                && (f.Protected || (f.Level == 0 && !Rights.HasFullControl(f.Aces.Where(a => a.Inherited), sid))))
+                throw new PlanError($"{principals[sid].Short} keeps full control on {(path != "" ? path : "the root")}: it is one "
+                    + "of the accounts that must have full control (Settings)");
             if (v is not null && !M.Cells.Contains(v)) throw new PlanError($"Right must be one of {string.Join(", ", M.Cells)} or empty");
             if (v is not null && principals[sid].Kind == "unknown")
                 throw new PlanError($"{principals[sid].Name} cannot be resolved (deleted or foreign account?); owlseye does not give it rights");

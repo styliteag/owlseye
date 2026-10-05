@@ -54,14 +54,14 @@ public sealed partial class Session
     }
 
     /// <summary>Groups with rights (the matrix columns that are groups), or all groups read from the directory: those
-    /// with rights and the groups nested in them. Hidden accounts are left out.</summary>
+    /// with rights and the groups nested in them. Hidden accounts only while the matrix shows them.</summary>
     List<(Principal P, Group? G)> KnownGroups(Snapshot snap, bool all)
     {
         var o = new Dictionary<string, (Principal, Group?)>();
         foreach (var p in St.Columns().Where(p => p.Kind is "group" or "wellknown"))
             o[p.Sid] = (p, p.Dn != "" ? snap.Groups.GetValueOrDefault(p.Dn) : null);
         if (all)
-            foreach (var g in snap.Groups.Values.Where(g => g.Sid != "" && !M.IsHidden(g.Sid, g.Sam)))
+            foreach (var g in snap.Groups.Values.Where(g => g.Sid != "" && !M.Hides(g.Sid, g.Sam)))
                 if (!o.ContainsKey(g.Sid))
                     o[g.Sid] = (snap.Principals.GetValueOrDefault(g.Sid) ?? new Principal(g.Sid, g.Sam, "group", g.Dn), g);
         return o.Values.OrderBy(x => M.Lower(x.Item1.Short), M.Ci).ToList();

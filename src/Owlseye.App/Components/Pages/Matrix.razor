@@ -23,6 +23,8 @@
       }
     </select></label>
   </form>
+  <label class="showhidden" title="SYSTEM, Administrators, Domain Admins and the accounts hidden in the settings as columns you can set. Findings and the desired state leave them out either way. Remembered for you.">
+    <input type="checkbox" checked="@M.ShowHidden" @onchange="OnShowHidden"> Hidden accounts</label>
   <div class="legend">
     <span class="c W">W</span> @(M.Write == M.Modify ? "Modify" : "Write (no delete)")
     <span class="c R">R</span> Read
@@ -64,7 +66,7 @@
             {
               z--;
               <th @key="p.Sid" class="@ColClass(p)"
-                  title="@p.Name · @p.Kind · @V.UsersIn[p.Sid] users" style="z-index: @z"><div><span>@p.Short</span></div></th>
+                  title="@p.Name · @p.Kind · @V.UsersIn[p.Sid] users@(M.IsHidden(p.Sid, p.Name) ? " · hidden account" : "")" style="z-index: @z"><div><span>@p.Short</span></div></th>
             }
           </tr>
         </thead>
@@ -160,7 +162,7 @@
   }
 
   string ColClass(Principal p) => "gcol" + (V!.ExtraSids.Contains(p.Sid) ? " extra" : "") + (p.Kind == "user" ? " user" : "")
-    + (p.Kind == "unknown" ? " unknown" : "");
+    + (p.Kind == "unknown" ? " unknown" : "") + (M.IsHidden(p.Sid, p.Name) ? " hiddenacct" : "");
 
   System.Diagnostics.Stopwatch? renderWatch;
 
@@ -297,6 +299,17 @@
   {
     ResetView();
     Act(S.Discard);
+  }
+
+  Task OnShowHidden(ChangeEventArgs e)
+  {
+    var show = e.Value is true;
+    ResetView();
+    return Busy(() =>
+    {
+      S.SetShowHidden(show);
+      return new Outcome("/matrix");
+    });
   }
 
   void OnDepth(ChangeEventArgs e)

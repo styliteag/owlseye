@@ -65,6 +65,7 @@ public static class Drift
             var a = cur.Cells.GetValueOrDefault(k);
             if (b == a || (desired.Legacy && b == "W" && a == "F") || skip.Contains(M.Lower(path))) continue;
             var name = cur.Names.GetValueOrDefault(sid) is { Length: > 0 } n ? n : desired.Names.GetValueOrDefault(sid, sid);
+            if (M.IsHidden(sid, name)) continue; // also while the matrix shows the hidden accounts (M.ShowHidden)
             o.Add(new DriftItem(b is null ? "added" : a is null ? "removed" : "changed", sid, name, path, b, a));
         }
         var want = desired.Protected.Select(M.Lower).ToHashSet();
