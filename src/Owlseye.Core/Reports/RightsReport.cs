@@ -47,7 +47,10 @@ public sealed class RightsReport
     public required int ChangeDays { get; init; }
     public required int PendingCount { get; init; }
 
-    public int UsersWithAccess => PerUser.Count(u => u.Folders.Count > 0);
+    public int UsersWithAccess => PerUser.Count;
+
+    /// <summary>All users read from the directory (PerUser has only those with access).</summary>
+    public int UsersTotal { get; init; }
 
     public string FileStem => "owlseye-report-" + BaselineStore.FileName(Share)["desired-".Length..^".json".Length] + "-"
         + CreatedAt[..10];
@@ -69,8 +72,10 @@ public static class ReportBuilder
             var cells = st.Cells;
             var cache = st.Cache is { } c && ReferenceEquals(c.Snap, snap) ? c : new RightsCache(snap, cells);
             var folders = st.Folders(snap);
-            var used = cells.Keys.Select(k => k.Sid).ToHashSet();
-            var cols = st.Columns().Where(p => used.Contains(p.Sid)).ToList(); // as scanned: not added or pending-only columns
+            // only accounts with a right on one of the folders shown (not added, pending-only or empty columns)
+            var shown = folders.Select(f => f.Path).ToHashSet();
+            var used = cells.Where(kv => kv.Value.Effective is not null && shown.Contains(kv.Key.Path)).Select(kv => kv.Key.Sid).ToHashSet();
+            var cols = st.Columns().Where(p => used.Contains(p.Sid)).ToList();
 
             var matrix = folders.Select(f => new ReportRow(f, cols.Select(p =>
             {
@@ -93,7 +98,7 @@ public static class ReportBuilder
                     var via = string.Join("; ", Rights.Via(snap, u.Dn, f.Path, cells, cache.UserSids));
                     access.Add(new AccessRow(Root(f.Path), u.Sam, u.Display, u.Enabled, right, via));
                 }
-                perUser.Add(new UserAccess(u, list));
+                if (list.Count > 0) perUser.Add(new UserAccess(u, list)); // users without access are left out
             }
 
             var groups = cols.Select(p => new GroupMembers(p,
@@ -113,6 +118,7 @@ public static class ReportBuilder
                 Matrix = matrix,
                 Access = access,
                 PerUser = perUser,
+                UsersTotal = users.Count,
                 Groups = groups,
                 Findings = st.Findings,
                 Changes = Changes(st, changeDays),
@@ -191,7 +197,7 @@ public static class ReportBuilder
             new[] { "Mode", r.Provider },
             new[] { "Folders", $"{r.Matrix.Count} shown (matrix depth {r.MaxLevel} and deeper deviations) of {r.FoldersScanned} scanned" },
             new[] { "Accounts with rights", r.Columns.Count.ToString() },
-            new[] { "Users with access", $"{r.UsersWithAccess} of {r.PerUser.Count}" },
+            new[] { "Users with access", $"{r.UsersWithAccess} of {r.UsersTotal}" },
             new[] { "Findings", string.Join(", ", r.Findings.GroupBy(f => f.Severity).Select(g => $"{g.Count()} {g.Key}")) is { Length: > 0 } fs ? fs : "none" },
             new[] { "State", r.PendingCount > 0 ? $"as scanned; {r.PendingCount} pending change(s) in owlseye are not included" : "as scanned" },
             new[] { "", "" },

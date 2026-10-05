@@ -20,6 +20,46 @@ public sealed class ReportTests : TestBase
 
     static readonly XNamespace X = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
+    /// <summary>The demo share plus a user in no group, and without the Authenticated Users entry on Public (which
+    /// reaches everybody): that user has no access anywhere.</summary>
+    sealed class WithIdleUser : IProvider
+    {
+        readonly DemoProvider inner = new();
+
+        public WithIdleUser()
+        {
+            var (prot, aces) = inner.FolderAcl("Public");
+            inner.SetFolderAcl("Public", prot, [.. aces.Where(a => a.Sid != "S-1-5-11" && !a.Inherited)]);
+        }
+        public string Name => inner.Name;
+        public string Share => inner.Share;
+        public string WhoAmI() => inner.WhoAmI();
+        public Snapshot Scan(Progress? progress = null)
+        {
+            var s = inner.Scan(progress);
+            var users = new Dictionary<string, User>(s.Users) { ["CN=Idle"] = new User("CN=Idle", "idle", "Ida Idle", true, "S-1-5-21-1-2-3-1999") };
+            return s with { Users = users };
+        }
+        public (bool Protected, List<Ace> Aces) FolderAcl(string path) => inner.FolderAcl(path);
+        public bool FolderExists(string path) => inner.FolderExists(path);
+        public void CreateFolder(string path) => inner.CreateFolder(path);
+        public void SetFolderAcl(string path, bool isProtected, IReadOnlyList<Ace> aces) => inner.SetFolderAcl(path, isProtected, aces);
+        public List<Principal> FindGroups(string q) => inner.FindGroups(q);
+    }
+
+    [Fact]
+    public void UsersWithoutAccessAndAccountsWithoutRightsAreLeftOut()
+    {
+        var cfg = new Config { Provider = "demo", Audit = Path.Combine(Tmp, "log.jsonl") };
+        var st = new State(cfg, new WithIdleUser());
+        st.Load();
+        new Session(st).AddColumn("S-1-5-32-545", "users"); // BUILTINSERS ADDED BY HAND: A COLUMN WITHOUT ANY RIGHT
+        var r = ReportBuilder.Build(st);
+        Assert.DoesNotContain(r.PerUser, u => u.User.Sam == "idle");
+        Assert.Equal((15, 16), (r.UsersWithAccess, r.UsersTotal));
+        Assert.All(r.Columns, c => Assert.Contains(r.Matrix, row => row.Cells[r.Columns.ToList().IndexOf(c)].Value is not null));
+    }
+
     [Fact]
     public void ReportShowsTheScanAsTheMatrixDoes()
     {
