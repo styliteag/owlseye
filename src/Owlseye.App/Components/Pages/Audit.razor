@@ -31,7 +31,16 @@
           }
           @if (kind == "settings")
           {
-            <span>Settings changed</span> <span class="mono muted">@e.Str("file")</span><br>
+            <span>Settings changed</span>@(e.Has("adopted") && e["adopted"]?.GetValue<bool>() == true ? " (took over the state folder's settings)" : "")<br>
+            @if (e.Str("shared") is { } shared)
+            {
+              <span class="muted">shared, in the state folder:</span> <span class="mono">@shared</span><br>
+              <span class="muted">where the state folder is, on this computer:</span> <span class="mono">@e.Str("file")</span><br>
+            }
+            else
+            {
+              <span class="mono muted">@e.Str("file")</span><br>
+            }
             @foreach (var (key, change) in e.Obj("changes") ?? [])
             {
               <span class="muted">@key:</span> <span class="mono">@Short(change?["before"]) → @Short(change?["after"])</span><br>

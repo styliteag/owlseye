@@ -1,7 +1,7 @@
 @page "/settings"
 @inherits PageBase
 
-<h1>Settings</h1>
+<h1>Settings <span class="muted small">owlseye @Version</span></h1>
 @if (V is null)
 {
   return;
@@ -75,6 +75,11 @@
 </form>
 
 @code {
+  /// <summary>The version of this exe, e.g. "0.9.18" (without the commit after "+").</summary>
+  static readonly string Version = (System.Reflection.CustomAttributeExtensions
+      .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Settings).Assembly)?.InformationalVersion ?? "?")
+      .Split('+')[0];
+
   SettingsView? V;
   int scanDepth;
   string write = "modify", fullControl = "", hidden = "", state = "", reason = "";
