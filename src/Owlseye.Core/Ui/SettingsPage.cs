@@ -190,3 +190,58 @@ public sealed partial class Session
         return new Outcome("/settings", message);
     }
 }
+
+/// <param name="Value">what goes into the setting: a keyword, "DOMAIN\name" or a SID</param>
+/// <param name="Hint">where it was found</param>
+public sealed record AccountChoice(string Value, string Label, string Hint);
+
+public sealed partial class Session
+{
+    (Snapshot Snap, Dictionary<string, string> Accounts)? aclAccounts;
+
+    /// <summary>All accounts in the scanned ACLs (sid -> name), hidden ones too, once per scan.</summary>
+    Dictionary<string, string> AclAccounts()
+    {
+        var snap = St.Snap;
+        if (aclAccounts is { } c && ReferenceEquals(c.Snap, snap)) return c.Accounts;
+        var o = new Dictionary<string, string>();
+        foreach (var a in snap.Folders.Values.SelectMany(f => f.Aces))
+            if (!o.ContainsKey(a.Sid) || o[a.Sid] == a.Sid) o[a.Sid] = a.Name != "" ? a.Name : a.Sid;
+        aclAccounts = (snap, o);
+        return o;
+    }
+
+    /// <summary>Accounts for the settings page's pickers: the keywords SYSTEM, Administrators and Domain Admins, the
+    /// accounts in this share's ACLs (also hidden ones such as a backup group) and groups from the directory.</summary>
+    public List<AccountChoice> AccountChoices(string q)
+    {
+        q = q.Trim();
+        if (q == "") return [];
+        bool Hit(string s) => s.Contains(q, StringComparison.OrdinalIgnoreCase);
+        var o = new List<AccountChoice>();
+        void Add(string value, string label, string hint)
+        {
+            if (!o.Any(x => string.Equals(x.Value, value, StringComparison.OrdinalIgnoreCase))) o.Add(new AccountChoice(value, label, hint));
+        }
+        foreach (var (k, hint) in new[] { ("SYSTEM", @"NT AUTHORITY\SYSTEM"), ("Administrators", "the file server's own group"),
+                     ("Domain Admins", "RID 512, in any language") })
+            if (Hit(k)) Add(k, k, hint);
+        lock (St.Lock)
+        {
+            if (St.Ready)
+                foreach (var (sid, name) in AclAccounts().OrderBy(kv => kv.Value, StringComparer.OrdinalIgnoreCase))
+                    if (Hit(name) || Hit(sid)) Add(M.IsSid(name) ? sid : name, name, $"in the ACLs · {sid}");
+        }
+        if (q.Length >= 2)
+        {
+            try
+            {
+                foreach (var p in St.Provider.FindGroups(q)) Add(p.Name, p.Name, $"directory · {p.Sid}");
+            }
+            catch (Exception e) when (e is not OutOfMemoryException) // directory not reachable: the other choices remain
+            {
+            }
+        }
+        return o.Take(25).ToList();
+    }
+}

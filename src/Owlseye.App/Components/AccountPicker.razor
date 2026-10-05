@@ -1,0 +1,45 @@
+@inject Session S
+
+@* Search field with suggestions under a settings list: a click hands the account to OnPick (one line in the list). *@
+<div class="picker">
+  <input type="search" placeholder="Add an account…" value="@q" @oninput="Search" @onkeydown="Key">
+  @if (hits.Count > 0)
+  {
+    <div class="hits">
+      @foreach (var h in hits)
+      {
+        <button type="button" @onclick="() => Pick(h)">@h.Label <span class="muted small">@h.Hint</span></button>
+      }
+    </div>
+  }
+  else if (q.Trim().Length > 0)
+  {
+    <div class="hits"><span class="muted small">No account found. You can type it into the list directly.</span></div>
+  }
+</div>
+
+@code {
+  [Parameter] public EventCallback<string> OnPick { get; set; }
+
+  string q = "";
+  List<AccountChoice> hits = [];
+
+  void Search(ChangeEventArgs e)
+  {
+    q = e.Value?.ToString() ?? "";
+    hits = S.AccountChoices(q);
+  }
+
+  async Task Pick(AccountChoice h)
+  {
+    await OnPick.InvokeAsync(h.Value);
+    q = "";
+    hits = [];
+  }
+
+  async Task Key(KeyboardEventArgs e)
+  {
+    if (e.Key == "Escape") (q, hits) = ("", []);
+    else if (e.Key == "Enter" && hits.Count > 0) await Pick(hits[0]); // the first suggestion
+  }
+}

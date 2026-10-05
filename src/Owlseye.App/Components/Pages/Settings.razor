@@ -39,6 +39,7 @@
     </p>
     <label>Accounts that must have full control on the root and on folders with broken inheritance
       <textarea rows="4" @bind="fullControl" placeholder="SYSTEM&#10;Administrators"></textarea></label>
+    <AccountPicker OnPick="@(v => fullControl = AddLine(fullControl, v))" />
     <p class="muted small">One per line: SYSTEM, Administrators (the file server's own group), Domain Admins (in any
       language), a SID or a name like CORP\backup. Missing ones are findings, and owlseye adds them when it writes such a
       folder. Empty = SYSTEM and Administrators.
@@ -49,14 +50,18 @@
     </p>
     <label>Further accounts to hide (no column, entries left alone)
       <textarea rows="3" @bind="hidden" placeholder="CORP\backup"></textarea></label>
+    <AccountPicker OnPick="@(v => hidden = AddLine(hidden, v))" />
     <p class="muted small">One per line, SID or name. SYSTEM, Administrators, Creator Owner, Domain Admins and Enterprise
       Admins are always hidden.</p>
   </section>
 
   <section>
     <h2>State folder</h2>
-    <label>Folder for the desired state and the log
-      <input type="text" @bind="state" placeholder="@V.StateDir"></label>
+    <label>Folder for the desired state and the log</label>
+    <div class="pathrow">
+      <input type="text" @bind="state" placeholder="@V.StateDir">
+      <button type="button" @onclick="BrowseState">Browse…</button>
+    </div>
     <p class="muted small">Now: log <span class="mono">@V.AuditPath</span>, desired state
       <span class="mono">@(V.BaselineDir ?? "in memory only (demo)")</span>.<br>
       Empty = your profile. For several admins use one folder on an admin share that only admins can write, e.g.
@@ -86,6 +91,19 @@
     fullControl = string.Join("\n", V.FullControl);
     hidden = string.Join("\n", V.Hidden);
     state = V.State;
+  }
+
+  /// <summary>Adds an account as a line of a list, unless it is there already.</summary>
+  static string AddLine(string list, string value)
+  {
+    var lines = list.Split('\n').Select(l => l.Trim()).Where(l => l != "").ToList();
+    if (!lines.Contains(value, StringComparer.OrdinalIgnoreCase)) lines.Add(value);
+    return string.Join("\n", lines);
+  }
+
+  void BrowseState()
+  {
+    if (Dialogs.PickFolder("State folder for the desired state and the log", state != "" ? state : V?.StateDir) is { } p) state = p;
   }
 
   Task Save()

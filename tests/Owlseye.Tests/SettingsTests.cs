@@ -142,6 +142,24 @@ public sealed class SettingsTests : TestBase, IDisposable
     }
 
     [Fact]
+    public void AccountPickerOffersKeywordsAclAccountsAndDirectoryGroups()
+    {
+        var p = new DemoProvider();
+        var (prot, aces) = p.FolderAcl("HR");
+        p.SetFolderAcl("HR", prot, [.. aces, new Ace(DomainAdmins, "DEMO\\Domain Admins", "group", M.Full, Flags: M.OiCi)]);
+        var st = new State(new Config { Provider = "demo", Audit = Path.Combine(Tmp, "log.jsonl") }, p);
+        st.Load();
+        var s = new Session(st);
+        Assert.Equal(["Domain Admins", "DEMO\\Domain Admins"], s.AccountChoices("domain adm").Select(c => c.Value)); // keyword, hidden ACL account
+        Assert.Contains(s.AccountChoices("sys"), c => c.Value == "SYSTEM");
+        var it = s.AccountChoices("G-I");
+        Assert.Contains(it, c => c.Value == "DEMO\\G-IT" && c.Hint.StartsWith("in the ACLs"));
+        Assert.Contains(it, c => c.Value == "DEMO\\G-Interns");
+        Assert.Contains(s.AccountChoices("users"), c => c.Value == "BUILTIN\\Users" && c.Hint.StartsWith("directory")); // no ACL entry
+        Assert.Empty(s.AccountChoices("  "));
+    }
+
+    [Fact]
     public void ConfigFileOrderIsCommandLineThenOwnThenNextToTheExe()
     {
         var exeDir = Path.Combine(Tmp, "app");

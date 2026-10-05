@@ -45,9 +45,10 @@ public sealed class Dialogs
 {
     static T OnUi<T>(Func<T> f) => Application.Current.Dispatcher.Invoke(f);
 
-    public string? PickFolder() => OnUi(() =>
+    public string? PickFolder(string title = "Open share", string? start = null) => OnUi(() =>
     {
-        var d = new OpenFolderDialog { Title = "Open share" };
+        var d = new OpenFolderDialog { Title = title };
+        if (start is { Length: > 0 } && Directory.Exists(start)) d.InitialDirectory = start;
         return d.ShowDialog(Application.Current.MainWindow) == true ? d.FolderName : null;
     });
 
