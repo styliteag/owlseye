@@ -45,25 +45,44 @@ public sealed class RightsConfigTests : TestBase
     }
 
     [Fact]
-    public void FullControlIsShownAsFAndThePanelSaysWhatIsThere()
+    public void FullControlIsTheValueFAndCanBeSet()
     {
-        var (_, s) = Client(new DemoProvider());
+        var (st, s) = Client(new DemoProvider());
         var panel = s.CellPanel(G("G-IT"), @"Programs\Payroll");
-        Assert.True(panel.Info.Full);
-        Assert.Equal("F", panel.Info.Display().Text);
-        Assert.Equal("Full control (this folder, subfolders and files)", panel.Entry);
-        Assert.Null(s.CellPanel(G("G-HR"), "HR").Entry); // a standard entry needs no explanation
+        Assert.Equal(("F", true), (panel.Info.Value, panel.Info.Standard));
+        Assert.Equal(("F", "F"), panel.Info.Display());
+        Assert.Equal("Entry here: F Full control", panel.Info.Tip);
+        Assert.Null(panel.Entry); // a standard entry needs no explanation
+        Assert.Contains("F", panel.Options);
+        Assert.Contains(st.Findings, f => f.Path == @"Programs\Payroll" && f.Text.StartsWith("Full control for G-IT"));
+        s.SetCell(G("G-HR"), "HR", "F");
+        var change = s.Preview().Plan!.AclOps.Single(o => o.Path == "HR").After.Single(a => a.Sid == G("G-HR"));
+        Assert.Equal((M.Full, M.OiCi), (change.Mask, change.Flags));
     }
 
     [Fact]
-    public void ReplacingFullControlWithWWarnsAboutWhatTheMatrixDoesNotShow()
+    public void FullControlToWIsAVisibleChangeNotAHiddenLoss()
     {
         var (_, s) = Client(new DemoProvider());
         s.SetCell(G("G-IT"), @"Programs\Payroll", "W");
+        var change = s.Preview().Plan!.AclOps.SelectMany(o => o.Changes).Single();
+        Assert.Equal(("F", "W"), (change.Before, change.After)); // the preview shows F -> W
+        Assert.Empty(s.Preview().HiddenLosses!);
+    }
+
+    [Fact]
+    public void ReplacingASpecialEntryWarnsAboutWhatTheMatrixDoesNotShow()
+    {
+        var p = new DemoProvider();
+        var (prot, aces) = p.FolderAcl("HR");
+        p.SetFolderAcl("HR", prot, [.. aces.Select(a => a.Sid == G("G-HR") ? a with { Mask = M.Modify | M.WriteDac } : a)]);
+        var (_, s) = Client(p);
+        var panel = s.CellPanel(G("G-HR"), "HR");
+        Assert.Equal("W*", panel.Info.Display().Text);
+        Assert.Equal("Modify + change permissions (this folder, subfolders and files)", panel.Entry);
+        s.SetCell(G("G-HR"), "HR", "W");
         var loss = Assert.Single(s.Preview().HiddenLosses!);
-        Assert.Equal((@"Programs\Payroll", "DEMO\\G-IT"), (loss.Path, loss.Name));
-        Assert.Equal("delete subfolders and files, change permissions, take ownership", loss.Lost); // Modify keeps delete itself
-        Assert.Equal("Full control (this folder, subfolders and files)", loss.Before);
+        Assert.Equal(("HR", "DEMO\\G-HR", "change permissions"), (loss.Path, loss.Name, loss.Lost));
         Assert.Equal("Modify (this folder, subfolders and files)", loss.After);
     }
 

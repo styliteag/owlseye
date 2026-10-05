@@ -23,7 +23,7 @@ own account: no service account, no stored password.
 - Rows are the folders as a tree (root, levels down to the chosen depth); columns are the accounts in the ACLs, without
   SYSTEM, Administrators and Creator Owner (F-M1, F-M3).
 - A cell shows `R`, `W`, `R|`, `W|` (own entry), a dashed value (inherited), `⊘` (blocked by broken inheritance) or
-  `*` (an entry that is not one of the four standard entries) (F-M5).
+  `*` (an entry that is not one of the standard entries), `F` for full control (F-M5).
 - Top-level folders can be collapsed, columns filtered by name (F-M4, F-M6).
 - The depth (1–10) is remembered per admin; deeper folders appear only where they have something of their own (F-M2).
 - A share with 2,000 folders and 60 groups stays responsive: a change shows in about 100 ms (N-2).

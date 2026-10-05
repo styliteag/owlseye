@@ -10,7 +10,7 @@ namespace Owlseye.Reports;
 
 /// <param name="Value">effective right (own entry or inherited), null = none</param>
 /// <param name="Own">entry on this folder (not inherited)</param>
-/// <param name="Standard">own entry is one of the four standard entries</param>
+/// <param name="Standard">own entry is one of the standard entries</param>
 public sealed record ReportCell(string? Value, bool Own, bool Standard, bool Full = false)
 {
     /// <summary>"W", "(W)" for inherited, "F" for own full control, "W*" for another non-standard own entry, "" for none.</summary>
@@ -195,7 +195,7 @@ public static class ReportBuilder
             new[] { "Findings", string.Join(", ", r.Findings.GroupBy(f => f.Severity).Select(g => $"{g.Count()} {g.Key}")) is { Length: > 0 } fs ? fs : "none" },
             new[] { "State", r.PendingCount > 0 ? $"as scanned; {r.PendingCount} pending change(s) in owlseye are not included" : "as scanned" },
             new[] { "", "" },
-            new[] { "Matrix legend", "W write, R read (this folder and below); W| R| this folder only; (W) inherited; F full control; * other special entry (not one of the four standard entries)" },
+            new[] { "Matrix legend", "W write, R read (this folder and below); W| R| this folder only; (W) inherited; F full control; * other special entry (not one of the standard entries)" },
             new[] { "Access", "one row per user and folder with the strongest right and the accounts it comes through" },
         };
         var matrixHeader = new List<string> { "Folder", "Inheritance" };

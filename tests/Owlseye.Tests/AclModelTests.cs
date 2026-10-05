@@ -19,7 +19,7 @@ public class AclModelTests : TestBase
     [InlineData(M.Modify, M.OiCi, "W", true)] // W is Modify by default ("write": "modify")
     [InlineData(M.Read, 0, "R|", true)]
     [InlineData(M.Modify, 0, "W|", true)]
-    [InlineData(M.Full, M.OiCi, "W", false)] // full control: special entry, shown as F
+    [InlineData(M.Full, M.OiCi, "F", true)] // full control
     [InlineData(M.WriteNoDelete, M.OiCi, "W", false)] // write without delete: special unless "write": "no-delete"
     [InlineData(0x100021u, 0, "R|", false)] // list/traverse only
     public void Classify(uint mask, int flags, string value, bool standard)
@@ -133,7 +133,7 @@ public class AclModelTests : TestBase
         Assert.Contains(("high", "Public", "Broad permission for Authenticated Users"), texts);
         Assert.Contains(("high", @"Public\Transfer", "Direct user entry for DEMO\\mmoore"), texts);
         Assert.Contains(("medium", @"Programs\ERP", "Administrators without full control here"), texts);
-        Assert.Contains(("low", @"Programs\Payroll", "Non-standard entry for G-IT (shown as W)"), texts);
+        Assert.Contains(("low", @"Programs\Payroll", "Full control for G-IT: its members can change permissions and take ownership"), texts);
         Assert.Contains(("medium", OPS, $@"G-Service-QA cannot open this folder to reach {OPS}\Service-QA (R| missing)"), texts);
         Assert.Contains(texts, t => t.Text.StartsWith("Explicit entry below level 3", StringComparison.Ordinal));
     }

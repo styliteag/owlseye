@@ -24,8 +24,9 @@ User → security group (e.g. universal) → folder ACL. A group may appear on a
 | `W` | Modify (`0x1301BF`: read, execute, write and delete), this folder + subfolders + files; with `"write": "no-delete"` in config.json read + write without delete (`0x1201BF`) | `W` |
 | `R\|` | Read this folder only (list, to reach subfolders) | `R\|` |
 | `W\|` | The same as `W`, this folder only | `W\|` |
+| `F` | Full control (`0x1F01FF`), this folder + subfolders + files: also change permissions and take ownership; for admin and service groups (a finding marks it) | |
 
-The masks live in one place (`src/Owlseye.Core/Model.cs`: `M.Read`, `M.Write`, `M.Standard`). Full control shows as `F`; other entries (write without delete while W means Modify, several entries of one group, special rights) show as `*` (special entry), and the cell panel says in Windows terms what is there. A click replaces a special entry with the standard entry; if that removes rights the matrix does not show (delete, change permissions, take ownership), the preview lists them before anything is written.
+The masks live in one place (`src/Owlseye.Core/Model.cs`: `M.Read`, `M.Write`, `M.Standard`). Other entries (write without delete while W means Modify, several entries of one group, special rights) show as `*` (special entry), and the cell panel says in Windows terms what is there, e.g. "Modify + change permissions". A click replaces a special entry with the standard entry; if that removes rights the matrix does not show (delete, change permissions, take ownership), the preview lists them before anything is written.
 
 - **R| automatic:** When a group gets a right on a folder, owlseye sets `R|` on every parent folder up to the root that the group cannot otherwise enter. "Enter" means: an own (or inherited) entry there, or every member already gets in via another group (typically `G-AllUsers` with `R|` on the root). When the last right below goes away, this `R|` goes too. An `R|` set by hand stays. Missing `R|` is a finding.
 - **Inheritance** (`[-]` in the Excel list, `⛔` in the matrix): `R`/`W` pass into subfolders until one is protected; `R|`/`W|` do not. Toggle on any folder except the root. Breaking copies all inherited entries as own entries (nobody loses access), then you remove selectively. Restoring removes explicit copies of what the parent folder inherits. **Clear** resets a folder to the default like a new one: inheritance on, no own entries (deny and special entries go too), the automatically set `R|` above disappears with it.
@@ -168,7 +169,7 @@ tag (`git push origin :v1.0.0`), fix, tag again.
 
 Rows are the folders (tree, top level collapsible), columns the groups. Clicking a cell or a folder opens a
 panel on the right: where a right comes from, group members, set right, toggle inheritance, create subfolder.
-Keyboard: arrows move, `R`, `W`, `L` or `|` for `R|`, `Shift`+`W` for `W|`, `Del` for no entry. Inherited rights
+Keyboard: arrows move, `R`, `W`, `F`, `L` or `|` for `R|`, `Shift`+`W` for `W|`, `Del` for no entry. Inherited rights
 can only be raised; to restrict, use "Break inheritance".
 
 | Mark | Meaning |
@@ -176,7 +177,7 @@ can only be raised; to restrict, use "Break inheritance".
 | `W` / `R` filled | entry on this folder |
 | `R\|` / `W\|` outlined | entry for this folder only |
 | dashed | inherited (panel shows from which folder) |
-| `F` | full control |
+| `F` | full control (darker) |
 | `*` | other special entry (other mask or flags; the panel says what it is) |
 | `⊘` | blocked: right on the parent folder does not arrive because inheritance is broken |
 | orange outline | pending change; dashed orange: automatic `R\|` |

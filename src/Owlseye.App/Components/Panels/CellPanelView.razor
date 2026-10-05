@@ -5,10 +5,10 @@
   @switch (info.Kind)
   {
     case "direct":
-      <b>Entry here:</b> @(info.Full ? "F Full control." : Labels.Label(info.Value) + ".")
+      <b>Entry here:</b> @(Labels.Label(info.Value) + ".")
       @if (!info.Standard)
       {
-        <text> The ACL entry is </text><b>@(Model.Entry ?? "special")</b><text>, not one of the four standard entries. Choosing a right
+        <text> The ACL entry is </text><b>@(Model.Entry ?? "special")</b><text>, not one of the standard entries. Choosing a right
         replaces it with the standard entry (W = @(M.Write == M.Modify ? "Modify" : "write without delete")); the preview says
         which rights that removes.</text>
       }
@@ -44,7 +44,7 @@
               @onclick="() => OnSetRight.InvokeAsync(right ?? string.Empty)">@(r ?? "–")</button>
     }
   </div>
-  <p class="muted small">R and W go down into subfolders (unless inheritance is broken there); R| and W| apply to this folder only. Giving a right here adds R| on the parent folders automatically.</p>
+  <p class="muted small">R, W and F go down into subfolders (unless inheritance is broken there); R| and W| apply to this folder only. Giving a right here adds R| on the parent folders automatically. F (full control) also lets the members change permissions and take ownership: meant for admin and service groups.</p>
 }
 else if (f.OtherAces)
 {

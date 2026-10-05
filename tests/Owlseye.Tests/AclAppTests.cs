@@ -193,8 +193,8 @@ public sealed class AclAppTests : TestBase
         var page = s.CellPanel(G("G-HR"), "HR");
         Assert.Equal("direct", page.Info.Kind); // "Entry here"
         Assert.StartsWith("Entry here", page.Info.Tip);
-        Assert.Equal([null, "R|", "R", "W|", "W"], page.Options);
-        string[] labels = ["No access", "R| List", "R Read", "W| Modify", "W Modify"];
+        Assert.Equal([null, "R|", "R", "W|", "W", "F"], page.Options);
+        string[] labels = ["No access", "R| List", "R Read", "W| Modify", "W Modify", "F Full control"];
         foreach (var (label, option) in labels.Zip(page.Options))
             Assert.StartsWith(label, Labels.Label(option)); // title="{label}…" on each choice
     }
@@ -242,8 +242,8 @@ public sealed class AclAppTests : TestBase
     {
         var (_, s) = Client(new DemoProvider());
         var hit = CellAt(s.Matrix(), G("G-IT"), @"Programs\Payroll"); // full control
-        Assert.Equal(("W odd", "F"), hit.Display());
-        Assert.Equal("Entry here: Full control", hit.Tip);
+        Assert.Equal(("F", "F"), hit.Display());
+        Assert.Equal("Entry here: F Full control", hit.Tip);
     }
 
     [Fact]

@@ -32,6 +32,7 @@ public static class Labels
         "R" => "R Read",
         "W|" => M.Write == M.Modify ? "W| Modify (this folder only)" : "W| Write, no delete (this folder only)",
         "W" => M.Write == M.Modify ? "W Modify" : "W Write, no delete",
+        "F" => "F Full control",
         _ => v,
     };
 
@@ -41,19 +42,33 @@ public static class Labels
     public static string Describe(IEnumerable<Ace> aces) =>
         string.Join("; ", aces.Select(a => $"{(a.Allow ? "" : "Deny: ")}{RightsName(a.Mask)} ({Scope(a.Flags)})"));
 
-    static string RightsName(uint mask) => mask switch
+    static string RightsName(uint mask)
     {
-        M.Full => "Full control",
-        M.Modify => "Modify",
-        M.WriteNoDelete => "Read, execute and write, no delete",
-        M.Read => "Read and execute",
-        0x120089 => "Read",
-        0x100116 => "Write",
-        0x10000000 => "Full control (generic)",
-        0xE0010000 => "Modify (generic)",
-        0xA0000000 => "Read and execute (generic)",
-        _ => $"special rights 0x{mask:X}",
-    };
+        switch (mask)
+        {
+            case M.Full: return "Full control";
+            case 0x10000000: return "Full control (generic)";
+            case 0xE0010000: return "Modify (generic)";
+            case 0xA0000000: return "Read and execute (generic)";
+            case 0x120089: return "Read";
+            case 0x100116: return "Write";
+        }
+        // the largest standard right it contains, plus what goes beyond it
+        var (name, @base) = (mask & M.Modify) == M.Modify ? ("Modify", M.Modify)
+            : (mask & M.WriteNoDelete) == M.WriteNoDelete ? ("Read, execute and write, no delete", M.WriteNoDelete)
+            : (mask & M.Read) == M.Read ? ("Read and execute", M.Read)
+            : ("", 0u);
+        if (@base == 0) return $"special rights 0x{mask:X}";
+        var extra = mask & ~@base;
+        var parts = new List<string>();
+        if ((extra & M.Delete) != 0) parts.Add("delete");
+        if ((extra & M.DeleteChild) != 0) parts.Add("delete subfolders and files");
+        if ((extra & M.WriteDac) != 0) parts.Add("change permissions");
+        if ((extra & M.WriteOwner) != 0) parts.Add("take ownership");
+        var rest = extra & ~(M.Delete | M.DeleteChild | M.WriteDac | M.WriteOwner);
+        if (rest != 0) parts.Add($"0x{rest:X}");
+        return parts.Count == 0 ? name : $"{name} + {string.Join(", ", parts)}";
+    }
 
     static string Scope(int flags)
     {
@@ -95,7 +110,7 @@ public sealed record CellInfo(string? Value, string Kind, string Tip, string? So
         {
             "pending" => ((v == "" ? "empty" : v) + " pend", Value ?? "–"),
             "auto" => ((v == "" ? "empty" : v) + " auto", Value ?? "–"),
-            "direct" => (v + (Standard ? "" : " odd"), Full ? "F" : Value + (Standard ? "" : "*")),
+            "direct" => (v + (Standard ? "" : " odd"), Value + (Standard ? "" : "*")),
             "inherited" => ("inh", Value ?? ""),
             "blocked" => ("blocked", "⊘"),
             _ => ("empty", ""),

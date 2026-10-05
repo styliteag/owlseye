@@ -15,7 +15,7 @@ namespace Owlseye;
 
 public static class M
 {
-    public static readonly string[] Cells = ["R|", "R", "W|", "W"];
+    public static readonly string[] Cells = ["R|", "R", "W|", "W", "F"];
 
     public static double Rank(string? v) => v switch
     {
@@ -24,6 +24,7 @@ public static class M
         "W|" => 0.75,
         "R" => 1,
         "W" => 2,
+        "F" => 3,
         _ => throw new ArgumentException($"Unknown right {v}"),
     };
 
@@ -47,6 +48,7 @@ public static class M
         ["R"] = (Read, OiCi),
         ["W|"] = (write, ThisFolder),
         ["W"] = (write, OiCi),
+        ["F"] = (Full, OiCi), // full control: also change permissions and take ownership
     };
 
     public const string System = "S-1-5-18", Admins = "S-1-5-32-544", CreatorOwner = "S-1-3-0", OwnerRights = "S-1-3-4";

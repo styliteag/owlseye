@@ -29,7 +29,7 @@ public sealed class Session(State st)
         }
         if (c is { Direct: not null } && c.Source == path)
         {
-            var tip = c.Full ? "Entry here: Full control" : $"Entry here: {Labels.Label(c.Direct)}" + (c.Standard ? "" : " (non-standard entry)");
+            var tip = $"Entry here: {Labels.Label(c.Direct)}" + (c.Standard ? "" : " (non-standard entry)");
             return new CellInfo(c.Direct, "direct", tip, path, c.Standard, Full: c.Full);
         }
         if (c is { Effective: not null })

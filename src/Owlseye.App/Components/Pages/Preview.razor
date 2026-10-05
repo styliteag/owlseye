@@ -77,12 +77,17 @@ else
       foreach (var c in o.Changes)
       {
         <tr><td class="mono">@Root(o.Path)</td><td>@ShortName(c.Name)</td>
-          <td>@(c.Before is not null && Rights.IsFullControl(o.Before.Where(a => a.Sid == c.Sid && a.Allow).ToList()) ? "F" : Labels.Short(c.Before))</td><td class="@(c.After is not null ? "gain" : "loss")">@Labels.Short(c.After)</td>
+          <td>@Labels.Short(c.Before)</td><td class="@(c.After is not null ? "gain" : "loss")">@Labels.Short(c.After)</td>
           <td>@if (c.Auto) {<span class="sev low">automatic R|</span>}</td></tr>
       }
     }
   </table>
   <p class="muted small">Only the entries listed change. Entries of other accounts, deny entries and special rights stay as they are; on folders with broken inheritance SYSTEM and Administrators keep (or get) full control. Windows applies each change to all subfolders; on large trees this can take a while.</p>
+  @if (plan.AclOps.SelectMany(o => o.Changes).Any(c => c.After == "F" && c.Before != "F"))
+  {
+    <p class="flash">F (full control) also lets the members of the group change the folder's permissions and take ownership
+      of it. That is usually meant for admin and service groups only.</p>
+  }
   <h2>Effect on users</h2>
   @if (plan.Impact.Count > 0)
   {

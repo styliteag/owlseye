@@ -1,14 +1,14 @@
 /* owlseye — compact, light + dark (style follows birdseye) */
 :root {
   --bg: #f6f7f9; --panel: #fff; --ink: #1b1f24; --muted: #6a737d; --line: #e3e6ea;
-  --accent: #2f6fde; --r: #7aa7f0; --m: #2f6fde; --pending: #b7791f; --warn: #b7791f; --bad: #d64545; --ok: #1f9d55;
+  --accent: #2f6fde; --r: #7aa7f0; --m: #2f6fde; --f: #1b3f8f; --pending: #b7791f; --warn: #b7791f; --bad: #d64545; --ok: #1f9d55;
   --hl: rgba(47, 111, 222, .08);
   --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #0f1216; --panel: #171b21; --ink: #e6e9ee; --muted: #8b949e; --line: #2a3038;
-          --accent: #5b8ff0; --r: #3d64a8; --m: #5b8ff0; --hl: rgba(91, 143, 240, .12); }
+          --accent: #5b8ff0; --r: #3d64a8; --m: #5b8ff0; --f: #8fb3f7; --hl: rgba(91, 143, 240, .12); }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font); }
@@ -120,6 +120,7 @@ table.matrix td button.c:focus-visible { outline: 2px solid var(--accent); outli
 .c.empty:hover::after { content: "+"; color: var(--muted); }
 .c.R { background: var(--r); color: #fff; }
 .c.W { background: var(--m); color: #fff; }
+.c.F { background: var(--f); color: #fff; }
 .c.RL, .c.WL { background: none; border: 1px solid var(--r); color: var(--accent); }
 .c.WL { border-color: var(--m); }
 .c.odd { box-shadow: inset 0 0 0 2px var(--warn); }

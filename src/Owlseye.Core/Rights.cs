@@ -101,7 +101,7 @@ public static class Rights
         ["S-1-5-32-545"] = "BUILTIN\\Users",
     };
 
-    static readonly string[] Reach = ["R|", "R", "W|", "W"]; // every right on a folder requires being able to reach it
+    static readonly string[] Reach = ["R|", "R", "W|", "W", "F"]; // every right on a folder requires being able to reach it
 
     /// <summary>Explicit Allow ACEs of an account on a folder -> (cell value, exactly the standard entry?).</summary>
     public static (string? Value, bool Standard) Classify(IReadOnlyList<Ace> aces)
@@ -110,7 +110,7 @@ public static class Rights
         var inheritable = aces.Where(a => (a.Flags & M.OiCi) != 0).ToList();
         IReadOnlyList<Ace> pool = inheritable.Count > 0 ? inheritable : aces;
         var write = pool.Any(a => (a.Mask & WriteBits) != 0);
-        var value = inheritable.Count > 0 ? (write ? "W" : "R") : (write ? "W|" : "R|");
+        var value = IsFullControl(aces) ? "F" : inheritable.Count > 0 ? (write ? "W" : "R") : (write ? "W|" : "R|");
         var a0 = aces[0];
         var std = M.Standard[value];
         return (value, aces.Count == 1 && a0.Mask == std.Mask && (a0.Flags & ~0x10) == std.Flags);
@@ -183,7 +183,7 @@ public static class Rights
             foreach (var (sid, e) in mine)
             {
                 var have = passing.TryGetValue(sid, out var p) ? p.V : null;
-                if (e.Value is "R" or "W" && M.Rank(e.Value) > M.Rank(have)) passing[sid] = (e.Value, f.Path);
+                if (e.Value is "R" or "W" or "F" && M.Rank(e.Value) > M.Rank(have)) passing[sid] = (e.Value, f.Path);
             }
             passes[f.Path] = passing;
             foreach (var sid in incoming.Keys.Union(mine.Keys))
@@ -399,6 +399,8 @@ public static class Rights
         foreach (var ((sid, path), c) in cells)
             if (c.Direct is not null && !c.Standard && snap.Folders[path].Level <= maxLevel)
                 o.Add(new("low", path, $"Non-standard entry for {ShortOf(snap, sid)} (shown as {c.Direct})"));
+            else if (c.Direct == "F" && snap.Folders[path].Level <= maxLevel)
+                o.Add(new("low", path, $"Full control for {ShortOf(snap, sid)}: its members can change permissions and take ownership"));
         foreach (var ((sid, anc), below) in Unreachable(snap, cells, maxLevel))
             o.Add(new("medium", anc, $"{ShortOf(snap, sid)} cannot open this folder to reach {below[0]} (R| missing)"));
         return o.OrderBy(x => SevRank[x.Severity]).ThenBy(x => M.Lower(x.Path), M.Ci).ThenBy(x => x.Text, M.Ci).ToList();
