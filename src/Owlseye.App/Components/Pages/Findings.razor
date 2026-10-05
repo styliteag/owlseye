@@ -2,6 +2,21 @@
 @inherits PageBase
 
 <h1>Findings: what does not match the model</h1>
+@if (checks is { } c)
+{
+  <p class="checks small">
+    <span><b>Checked</b> @c.Folders folders.</span>
+    <span>Moved folders (they keep the rights of where they were): <b class="@(c.Moved > 0 ? "loss" : "")">@c.Moved</b>.</span>
+    @if (c.KeepFolder)
+    {
+      <span>W that users can still move (written before "Modify inside"): <b class="@(c.MovableW > 0 ? "loss" : "")">@c.MovableW</b>.</span>
+      if (c.MovableW > 0)
+      {
+        <button disabled="@Ui.Busy" @onclick="Convert">Convert them…</button>
+      }
+    }
+  </p>
+}
 @if (items.Count > 0)
 {
   <table class="list">
@@ -19,6 +34,13 @@ else
 
 @code {
   IReadOnlyList<Finding> items = [];
+  FindingChecks? checks;
 
-  protected override void Refresh() => items = S.FindingsPage();
+  protected override void Refresh()
+  {
+    items = S.FindingsPage();
+    checks = S.FindingsChecks();
+  }
+
+  void Convert() => Go(S.ConvertMovableW());
 }

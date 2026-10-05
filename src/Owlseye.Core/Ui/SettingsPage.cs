@@ -10,7 +10,8 @@ namespace Owlseye.Ui;
 /// <param name="State">the state folder as set ("" = the data folder)</param>
 public sealed record SettingsView(string? File, string SaveTo, bool CanSave, string? Blocked, int ScanDepth, string Write,
     IReadOnlyList<string> Hidden, IReadOnlyList<string> FullControl, IReadOnlyList<Principal> Required, string State,
-    string StateDir, string AuditPath, string? BaselineDir, string Provider, string SharedFile = "", bool SharedExists = false);
+    string StateDir, string AuditPath, string? BaselineDir, string Provider, string SharedFile = "", bool SharedExists = false,
+    int PlainModify = 0);
 
 public sealed record SettingsInput(int ScanDepth, string Write, IReadOnlyList<string> Hidden, IReadOnlyList<string> FullControl,
     string State);
@@ -55,7 +56,7 @@ public sealed partial class Session
             var reason = blocked ?? (St.PendingCount > 0 ? "Apply or discard the pending changes first: saving works the rights out anew." : null);
             return new SettingsView(c.File, target, reason is null, reason, c.ScanDepth, c.Write, c.Hidden, c.FullControl,
                 St.Ready ? Rights.RequiredFullControl(St.Snap) : [], c.State, c.StateDir, c.AuditPath, c.BaselineDir, c.Provider,
-                c.SharedFile, File.Exists(c.SharedFile));
+                c.SharedFile, File.Exists(c.SharedFile), St.Ready ? Rights.PlainModifyEntries(St.Snap) : 0);
         }
     }
 
@@ -210,7 +211,9 @@ public sealed partial class Session
                 + (changes.ContainsKey("scan_depth") && St.OpenShare is null ? " The scan depth applies at the next start." : "")
                 + (moved is null ? "" : moved.Existing
                     ? adopted ? " Nothing was moved." : $" {next.StateDir} already held owlseye state: it is used from now on, nothing was moved."
-                    : $" Moved {moved.Moved.Count} {(moved.Moved.Count == 1 ? "file" : "files")} to {next.StateDir}.");
+                    : $" Moved {moved.Moved.Count} {(moved.Moved.Count == 1 ? "file" : "files")} to {next.StateDir}.")
+                + (changes.ContainsKey("write") && M.KeepFolder && St.Ready && Rights.PlainModifyEntries(St.Snap) is > 0 and var n
+                    ? $" {n} W entr{(n == 1 ? "y" : "ies")} still let users move their folder: the Findings page converts them." : "");
         }
         St.NotifyChanged();
         return new Outcome("/settings", message);

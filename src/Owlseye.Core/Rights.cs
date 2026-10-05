@@ -8,9 +8,11 @@
 namespace Owlseye;
 
 /// <param name="Full">the entry is full control (value F, passed down like R and W)</param>
-public sealed record Explicit(string Value, bool Standard, bool Full = false);
+/// <param name="Movable">with "write": "keep-folder", a W that is still the single Modify entry: users can delete,
+/// rename or move the folder (not a special entry, it just is not converted yet)</param>
+public sealed record Explicit(string Value, bool Standard, bool Full = false, bool Movable = false);
 
-public sealed record Cell(string? Direct, string? Effective, string? Source, bool Standard = true, bool Full = false);
+public sealed record Cell(string? Direct, string? Effective, string? Source, bool Standard = true, bool Full = false, bool Movable = false);
 
 public sealed record Finding(string Severity, string Path, string Text);
 
@@ -185,6 +187,16 @@ public static class Rights
 
     public static string? CreatorOwnerOf(Folder f, bool inherited = false) => OwnerEntryOf(f, M.CreatorOwner, inherited);
 
+    /// <summary>The one entry W is everywhere but with "keep-folder": Modify on this folder, subfolders and files.</summary>
+    static bool IsPlainModify(IReadOnlyList<Ace> aces) =>
+        aces.Count == 1 && aces[0].Mask == M.Modify && (aces[0].Flags & ~M.InheritedAce) == M.OiCi;
+
+    /// <summary>Own W entries that are the single Modify entry (accounts the matrix shows): what "keep-folder" would
+    /// convert. Counted for the settings page, whatever "write" is now.</summary>
+    public static int PlainModifyEntries(Snapshot snap) =>
+        snap.Folders.Values.Sum(f => f.Explicit.Where(a => a.Allow && !M.Hides(a.Sid, a.Name)).GroupBy(a => a.Sid)
+            .Count(g => IsPlainModify(g.ToList())));
+
     /// <summary>Does the account have full control here through these entries (own or inherited)?</summary>
     public static bool HasFullControl(IEnumerable<Ace> aces, string sid) =>
         IsFullControl(aces.Where(a => a.Allow && a.Sid == sid).ToList());
@@ -204,7 +216,7 @@ public static class Rights
         foreach (var (k, v) in by)
         {
             var (value, standard) = Classify(v);
-            o[k] = new Explicit(value!, standard, IsFullControl(v));
+            o[k] = new Explicit(value!, standard, IsFullControl(v), M.KeepFolder && value == "W" && !standard && IsPlainModify(v));
         }
         return o;
     }
@@ -267,7 +279,7 @@ public static class Rights
                 string? inh = null, src = null;
                 if (incoming.TryGetValue(sid, out var i)) (inh, src) = (i.V, i.Src);
                 var (eff, esrc) = M.Rank(d) >= M.Rank(inh) ? (d, f.Path) : (inh, src);
-                o[(sid, f.Path)] = new Cell(d, eff, esrc, e?.Standard ?? true, e?.Full ?? false);
+                o[(sid, f.Path)] = new Cell(d, eff, esrc, e?.Standard ?? true, e?.Full ?? false, e?.Movable ?? false);
             }
         }
         return o;
@@ -525,7 +537,7 @@ public static class Rights
         }
         // hidden accounts shown in the matrix (M.ShowHidden) are no findings: their full control is the point
         foreach (var ((sid, path), c) in cells.Where(kv => !HiddenSid(snap, kv.Key.Sid)))
-            if (c.Direct is not null && !c.Standard && snap.Folders[path].Level <= maxLevel)
+            if (c.Direct is not null && !c.Standard && !c.Movable && snap.Folders[path].Level <= maxLevel) // Movable: one notice on the findings page
                 o.Add(new("low", path, $"Non-standard entry for {ShortOf(snap, sid)} (shown as {c.Direct})"));
             else if (c.Direct == "F" && snap.Folders[path].Level <= maxLevel)
                 o.Add(new("low", path, $"Full control for {ShortOf(snap, sid)}: its members can change permissions and take ownership"));

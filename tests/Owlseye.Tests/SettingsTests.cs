@@ -100,6 +100,15 @@ public sealed class SettingsTests : TestBase, IDisposable
     }
 
     [Fact]
+    public void SwitchingToKeepFolderSaysWhatIsLeftToConvert()
+    {
+        var (st, s) = Client();
+        var r = s.SaveSettings(new SettingsInput(st.Cfg.ScanDepth, "keep-folder", [], ["SYSTEM", "Administrators"], ""), "");
+        Assert.False(r.Error, r.Message);
+        Assert.Contains("still let users move their folder: the Findings page converts them", r.Message);
+    }
+
+    [Fact]
     public void SavingWaitsForPendingChangesAndChecksValues()
     {
         var (_, s) = Client();

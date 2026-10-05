@@ -37,9 +37,15 @@
       <label><input type="radio" name="write" checked="@(write == "no-delete")" @onchange="@(() => write = "no-delete")"> Read and write, no delete</label>
       <label><input type="radio" name="write" checked="@(write == "keep-folder")" @onchange="@(() => write = "keep-folder")"> Modify inside, the folder itself cannot be deleted, renamed or moved</label>
     </p>
-    <p class="muted small">"Modify inside" writes W as two entries: write without delete on the folder, Modify on its subfolders and
-      files. Users then cannot move the folders that have a W entry (they would take their rights along). Existing W entries show
-      as special (W*) until they are set again.
+    <p class="muted small">"Modify inside" writes W as two entries: write without delete on the folder itself, Modify on its
+      subfolders and files. Users then cannot delete, rename or move a folder through its W entry (a moved folder would take its
+      rights along).
+      @if (write == "keep-folder" && V.Write != "keep-folder" && V.PlainModify > 0)
+      {
+        <br><b>@V.PlainModify W entr@(V.PlainModify == 1 ? "y is" : "ies are") the single Modify entry on this share.</b>
+        <text> They keep working, and saving writes nothing: the matrix marks them</text> <span class="c W movable">W</span>
+        <text> and the Findings page converts them in one go, with a preview.</text>
+      }
     </p>
     <label>Accounts that must have full control on the root and on folders with broken inheritance
       <textarea rows="4" @bind="fullControl" placeholder="SYSTEM&#10;Administrators"></textarea></label>

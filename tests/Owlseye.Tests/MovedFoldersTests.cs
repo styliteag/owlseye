@@ -95,6 +95,8 @@ public sealed class MovedFoldersTests : TestBase
         st.Load();
         var s = new Session(st);
         Assert.True(s.FolderPanel(Moved).Stale);
+        Assert.Equal(1, s.FindingsChecks().Moved); // the findings page says what was checked, also when it is 0
+        Assert.True(s.Matrix().Rows.Single(r => r.Folder.Path == Moved).Moved); // ↯ in the row
         Assert.Throws<UserError>(() => s.ReinheritFolder("HR")); // nothing to re-apply there
 
         s.ReinheritFolder(Moved);

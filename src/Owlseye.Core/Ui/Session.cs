@@ -29,8 +29,10 @@ public sealed partial class Session(State st)
         }
         if (c is { Direct: not null } && c.Source == path)
         {
-            var tip = $"Entry here: {Labels.Label(c.Direct)}" + (c.Standard ? "" : " (non-standard entry)");
-            return new CellInfo(c.Direct, "direct", tip, path, c.Standard, Full: c.Full);
+            var tip = c.Movable
+                ? "Entry here: W, written before \"Modify inside\": users can still delete, rename or move this folder. Choose W to convert it"
+                : $"Entry here: {Labels.Label(c.Direct)}" + (c.Standard ? "" : " (non-standard entry)");
+            return new CellInfo(c.Direct, "direct", tip, path, c.Standard, Full: c.Full, Movable: c.Movable);
         }
         if (c is { Effective: not null })
         {
@@ -78,6 +80,7 @@ public sealed partial class Session(State st)
             var cols = St.Columns(q);
             var folders = St.Folders(snap);
             var (odd, way) = St.Deep(snap);
+            var moved = Rights.Stale(snap);
             var parents = folders.Select(f => f.Parent).OfType<string>().ToHashSet();
             var flagged = St.Findings.Select(f => M.Lower(f.Path)).ToHashSet();
             var newPaths = plan?.CreateOps.ToHashSet() ?? [];
@@ -107,7 +110,8 @@ public sealed partial class Session(State st)
                 parents.Contains(f.Path),
                 flagged.Contains(M.Lower(f.Path)),
                 f.Path.Split('\\')[0],
-                St.PendingFolders.ContainsKey(f.Path))).ToList();
+                St.PendingFolders.ContainsKey(f.Path),
+                moved.Contains(f.Path))).ToList();
             return new MatrixView(cols, rows, usersIn, err, q, St.PendingCount, St.PendingNew.Keys.ToList(), St.Drift.Count,
                 St.Cfg.MaxLevel, St.Extra.Keys.ToHashSet());
         }
@@ -841,6 +845,33 @@ public sealed partial class Session(State st)
     }
 
     public IReadOnlyList<Finding> FindingsPage() => St.Findings;
+
+    public FindingChecks FindingsChecks()
+    {
+        lock (St.Lock)
+            return new FindingChecks(St.Snap.Folders.Count, Rights.Stale(St.Snap).Count, M.KeepFolder, MovableW().Count);
+    }
+
+    List<(string Sid, string Path)> MovableW() =>
+        St.Cells.Where(kv => kv.Value.Movable && kv.Value.Source == kv.Key.Path).Select(kv => kv.Key).ToList();
+
+    /// <summary>With "keep-folder": every W still in the single-entry form becomes a pending W, which owlseye writes as
+    /// the two entries (write without delete on the folder, Modify below).</summary>
+    public Outcome ConvertMovableW()
+    {
+        lock (St.Lock)
+        {
+            var add = MovableW().Where(k => !St.Pending.ContainsKey(k)).ToList();
+            if (add.Count == 0) return new Outcome("/findings", "Every W already keeps its folder.");
+            foreach (var k in add) St.Pending[k] = "W";
+            CheckPlan(() =>
+            {
+                foreach (var k in add) St.Pending.Remove(k);
+            });
+            St.NotifyChanged();
+            return new Outcome("/preview", $"{add.Count} W entr{(add.Count == 1 ? "y" : "ies")} to convert: check the preview, then apply.");
+        }
+    }
 
     public AuditView AuditPage() => new(St.Audit.Path, St.Audit.Entries());
 }

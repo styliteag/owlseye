@@ -152,6 +152,31 @@ public sealed class RightsSettingsTests : TestBase, IDisposable
     }
 
     [Fact]
+    public void KeepFolderMarksTheOldWAndConvertsItInOneGo()
+    {
+        var st = new State(new Config { Provider = "demo", Audit = Path.Combine(Tmp, "log.jsonl") }, new DemoProvider());
+        st.Load();
+        var s = new Session(st);
+        var plain = s.SettingsPage().PlainModify; // the settings page says how many W entries "keep-folder" would concern
+        Assert.True(plain > 0);
+        Assert.False(s.FindingsChecks().KeepFolder);
+
+        M.Configure("keep-folder", []);
+        st.Rescan(st.Snap);
+        Assert.DoesNotContain(st.Findings, f => f.Text.Contains("(shown as W)")); // marked, not special entries
+        Assert.Equal((true, plain), (s.FindingsChecks().KeepFolder, s.FindingsChecks().MovableW));
+        CellInfo HrW() => s.Matrix().Rows.Single(r => r.Folder.Path == "HR").Cells.Single(c => c.Kind == "direct" && c.Value == "W");
+        Assert.Equal(("W movable", "W"), HrW().Display());
+
+        var o = s.ConvertMovableW();
+        Assert.Equal("/preview", o.Url);
+        Assert.Equal(plain, st.PendingCount);
+        Assert.False(s.Apply("convert", s.Preview().Phash).Error);
+        Assert.Equal(0, s.FindingsChecks().MovableW);
+        Assert.Equal(("W", "W"), HrW().Display());
+    }
+
+    [Fact]
     public void UnknownWriteSettingIsRefused()
     {
         var e = Assert.Throws<ArgumentException>(() => M.Configure("delete", []));

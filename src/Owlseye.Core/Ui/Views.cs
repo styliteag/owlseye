@@ -117,7 +117,7 @@ public static class Labels
 /// <param name="Source">folder an inherited right comes from</param>
 /// <param name="Before">for pending/auto: explicit entry before</param>
 public sealed record CellInfo(string? Value, string Kind, string Tip, string? Source = null, bool Standard = true,
-    string? Before = null, string? BlockedRight = null, bool Full = false)
+    string? Before = null, string? BlockedRight = null, bool Full = false, bool Movable = false)
 {
     /// <summary>CSS classes and text of the matrix button.</summary>
     public (string Css, string Text) Display()
@@ -127,6 +127,7 @@ public sealed record CellInfo(string? Value, string Kind, string Tip, string? So
         {
             "pending" => ((v == "" ? "empty" : v) + " pend", Value ?? "–"),
             "auto" => ((v == "" ? "empty" : v) + " auto", Value ?? "–"),
+            "direct" when Movable => (v + " movable", Value!), // W not converted to "keep-folder" yet: marked, not special
             "direct" => (v + (Standard ? "" : " odd"), Value + (Standard ? "" : "*")),
             "inherited" => ("inh", Value ?? ""),
             "blocked" => ("blocked", "⊘"),
@@ -138,7 +139,7 @@ public sealed record CellInfo(string? Value, string Kind, string Tip, string? So
 /// <summary>One folder row of the matrix. The cells are computed when first asked for: the UI draws only the rows in
 /// view, so on a large share most rows never need them.</summary>
 public sealed class MatrixRow(Folder folder, Func<IReadOnlyList<CellInfo>> cells, int contentSig, bool isProtected, bool pendingFolder,
-    bool isNew, string deep, bool hasChildren, bool flagged, string top, bool pendingInheritance = false)
+    bool isNew, string deep, bool hasChildren, bool flagged, string top, bool pendingInheritance = false, bool moved = false)
 {
     readonly Lazy<IReadOnlyList<CellInfo>> lazyCells = new(cells);
 
@@ -153,10 +154,13 @@ public sealed class MatrixRow(Folder folder, Func<IReadOnlyList<CellInfo>> cells
     public string Top { get; } = top;
     public bool PendingInheritance { get; } = pendingInheritance;
 
+    /// <summary>Moved here (Rights.Stale): its inherited entries are not what its parent passes down.</summary>
+    public bool Moved { get; } = moved;
+
     /// <summary>Changes whenever anything shown in the row changes (contentSig covers its cells, pending changes and
     /// blocked rights): the UI redraws only rows whose signature changed.</summary>
     public int Sig { get; } = HashCode.Combine(HashCode.Combine(folder.Path, folder.Name, isProtected, pendingFolder, isNew, deep, hasChildren, flagged),
-        pendingInheritance, contentSig);
+        pendingInheritance, contentSig, moved);
 }
 
 public sealed record MatrixView(
@@ -175,6 +179,10 @@ public sealed record CellPanel(Principal P, Folder F, CellInfo Info, IReadOnlyLi
     IReadOnlyList<User>? Members, bool CanBreak, bool CanRestore, int MaxLevel, string? Entry = null);
 
 public sealed record Grant(string Name, string Right, string? Source);
+
+/// <summary>What owlseye checked, shown above the findings so that an empty list means something.</summary>
+/// <param name="MovableW">W entries users can still delete, rename or move (only counted with "keep-folder")</param>
+public sealed record FindingChecks(int Folders, int Moved, bool KeepFolder, int MovableW);
 
 /// <summary>An entry of a hidden account on a folder (SYSTEM, Domain Admins, …), shown in the folder panel.</summary>
 public sealed record HiddenEntry(string Name, string Right, bool Inherited);

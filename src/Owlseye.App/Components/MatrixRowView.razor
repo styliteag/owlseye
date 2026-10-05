@@ -14,6 +14,11 @@
     <button type="button" class="@(Row.Protected ? "inh-icon off" : "inh-icon")" title="@InhTitle()"
             @onclick="() => OnFolder.InvokeAsync(f.Path)">@(Row.Protected ? "⛔" : "↳")</button>
     <button type="button" class="fname" title="@(f.Path != "" ? f.Path : Share)" @onclick="() => OnFolder.InvokeAsync(f.Path)">@((Row.IsNew ? "＋ " : "") + f.Name)</button>
+    @if (Row.Moved)
+    {
+      <button type="button" class="moved-icon" title="Moved here: its inherited entries are not what its parent passes down, so it keeps the rights of where it was. Open it to re-apply inheritance."
+              @onclick="() => OnFolder.InvokeAsync(f.Path)">↯</button>
+    }
     @if (Row.Flagged)
     {
       <a class="flag" href="/folder?path=@Uri.EscapeDataString(f.Path)" title="Findings on this folder">⚠</a>

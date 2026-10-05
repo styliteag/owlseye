@@ -123,6 +123,11 @@ table.matrix td button.c:focus-visible { outline: 2px solid var(--accent); outli
 .c.R { background: var(--r); color: #fff; }
 .c.W { background: var(--m); color: #fff; }
 .c.F { background: var(--f); color: #fff; }
+.c.movable { position: relative; }
+.c.movable::after { content: ""; position: absolute; top: 0; right: 0; border-top: 7px solid var(--warn); border-left: 7px solid transparent; }
+.moved-icon { border: 0; background: none; padding: 0 2px; color: var(--bad); font-weight: 700; cursor: pointer; }
+.checks { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+.checks button { margin-left: 6px; }
 .c.RL, .c.WL { background: none; border: 1px solid var(--r); color: var(--accent); }
 .c.WL { border-color: var(--m); }
 .c.odd { box-shadow: inset 0 0 0 2px var(--warn); }
