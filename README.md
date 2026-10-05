@@ -115,10 +115,16 @@ owlseye always works with UNC. `max_level` (default 3) is the default matrix dep
 `"hidden": ["CORP\\backup"]`. `full_control` lists the accounts that must have full control on the root and on folders
 with broken inheritance (default `["SYSTEM", "Administrators"]`; also `Domain Admins` in any language, SIDs or names).
 
-`state` is the folder for the desired state and the log (default `%LOCALAPPDATA%\owlseye`; `audit` and `baseline` can
-still name other places). All of these except provider and share can be changed on the **Settings** page; every change is logged. It saves to the
-config.json in use if it can be written, otherwise to `%LOCALAPPDATA%\owlseye\config.json`, which owlseye reads at the
-next start before a config.json next to the exe (order: `--config`, then that file, then the one next to the exe).
+`state` is the folder for the desired state, the log and the **shared settings** (default `%LOCALAPPDATA%\owlseye`;
+`audit` and `baseline` can still name other places). `scan_depth`, `write`, `hidden` and `full_control` are kept there
+in `owlseye-settings.json` and win over the same keys in the local config.json: every admin who uses the state folder
+works by the same rules, and the local config.json only needs to say where the folder is.
+
+All of these except provider and share can be changed on the **Settings** page; every change is logged. The shared
+settings go into the state folder; where the state folder is goes into the config.json in use if it can be written,
+otherwise into `%LOCALAPPDATA%\owlseye\config.json`, which owlseye reads at the next start before a config.json next to
+the exe (order: `--config`, then that file, then the one next to the exe). Changing the state folder to one that
+already holds owlseye state takes over its desired state, log and settings; an empty one gets them moved there.
 
 ### Installing
 

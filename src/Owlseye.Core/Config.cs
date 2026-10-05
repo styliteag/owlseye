@@ -38,6 +38,40 @@ public sealed record Config
     /// <summary>Where the desired state and the log go unless audit/baseline name other places.</summary>
     public string StateDir => State != "" ? State : Paths.DataDir();
 
+    /// <summary>The settings shared by everyone who uses a state folder: scan depth, what W means, full control, hidden
+    /// accounts. Not "settings.json", which holds each admin's own UI settings in the data folder.</summary>
+    public const string SharedFileName = "owlseye-settings.json";
+
+    public string SharedFile => Path.Combine(StateDir, SharedFileName);
+
+    /// <summary>With the shared settings of the state folder, if it has them: they win over the same keys in the local
+    /// config.json, so all admins of one state folder work by the same rules.</summary>
+    public Config WithShared()
+    {
+        var path = SharedFile;
+        if (!System.IO.File.Exists(path)) return this;
+        var raw = JsonNode.Parse(System.IO.File.ReadAllText(path)) as JsonObject ?? [];
+        return this with
+        {
+            ScanDepth = (int?)raw.Long("scan_depth") ?? ScanDepth,
+            Write = raw.Str("write") ?? Write,
+            Hidden = Strings(raw["hidden"]) ?? Hidden,
+            FullControl = Strings(raw["full_control"]) is { Count: > 0 } fc ? fc : FullControl,
+        };
+    }
+
+    /// <summary>The shared settings into the state folder (other keys of the file stay).</summary>
+    public static void SaveShared(string path, Config c)
+    {
+        var raw = System.IO.File.Exists(path) ? JsonNode.Parse(System.IO.File.ReadAllText(path)) as JsonObject ?? [] : [];
+        raw["scan_depth"] = c.ScanDepth;
+        raw["write"] = c.Write;
+        raw["hidden"] = new JsonArray(c.Hidden.Select(h => (JsonNode)h!).ToArray());
+        raw["full_control"] = new JsonArray(c.FullControl.Select(h => (JsonNode)h!).ToArray());
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        Json.WriteAtomic(path, Json.Pretty(raw), ".shared-");
+    }
+
     public string? BaselineDir => Baseline != "" ? Baseline : Provider == "demo" ? null : StateDir;
 
     public string SimPath => SimDir != "" ? SimDir : Path.Combine(Paths.DataDir(), "sim");
@@ -70,14 +104,12 @@ public sealed record Config
     static List<string>? Strings(JsonNode? n) =>
         n is JsonArray a ? a.Select(x => x?.GetValue<string>() ?? "").Select(s => s.Trim()).Where(s => s != "").ToList() : null;
 
-    /// <summary>The settings page's keys into a config.json: the other keys of an existing file stay as they are.</summary>
+    /// <summary>Where the state folder is into the local config.json (the shared settings go into the state folder, see
+    /// SaveShared, and leave this file); its other keys stay as they are.</summary>
     public static void Save(string path, Config c)
     {
         var raw = System.IO.File.Exists(path) ? JsonNode.Parse(System.IO.File.ReadAllText(path)) as JsonObject ?? [] : [];
-        raw["scan_depth"] = c.ScanDepth;
-        raw["write"] = c.Write;
-        raw["hidden"] = new JsonArray(c.Hidden.Select(h => (JsonNode)h!).ToArray());
-        raw["full_control"] = new JsonArray(c.FullControl.Select(h => (JsonNode)h!).ToArray());
+        foreach (var key in new[] { "scan_depth", "write", "hidden", "full_control" }) raw.Remove(key);
         raw["state"] = c.State;
         raw["audit"] = c.Audit;
         raw["baseline"] = c.Baseline;

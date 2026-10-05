@@ -65,8 +65,10 @@ public sealed class SettingsTests : TestBase, IDisposable
         var r = s.SaveSettings(new SettingsInput(4, "modify", ["DEMO\\G-IT", " "], ["SYSTEM", "Domain Admins"], ""), "T-9");
         Assert.False(r.Error, r.Message);
         var json = JsonNode.Parse(File.ReadAllText(file))!.AsObject();
-        Assert.Equal(("kept", 4L), (json.Str("dl_ou"), json.Long("scan_depth"))); // other keys stay
-        Assert.Equal(["DEMO\\G-IT"], json["hidden"]!.AsArray().Select(x => (string)x!));
+        Assert.Equal(("kept", null), (json.Str("dl_ou"), json.Long("scan_depth"))); // other keys stay, the shared ones move out
+        var shared = JsonNode.Parse(File.ReadAllText(Path.Combine(AppData, Config.SharedFileName)))!.AsObject(); // state folder
+        Assert.Equal(4L, shared.Long("scan_depth"));
+        Assert.Equal(["DEMO\\G-IT"], shared["hidden"]!.AsArray().Select(x => (string)x!));
         Assert.DoesNotContain(s.Matrix().Columns, c => c.Short == "G-IT"); // hidden at once
         Assert.Equal(4, st.Cfg.ScanDepth);
         var entry = st.Audit.Entries().First(e => e.Str("kind") == "settings");
@@ -125,6 +127,45 @@ public sealed class SettingsTests : TestBase, IDisposable
         Assert.Contains(st.Audit.Entries(), e => e.Str("kind") == "baseline_init"); // the old log went along
         Assert.Contains(st.Audit.Entries(), e => e.Str("kind") == "settings" && e.Str("reason") == "to the admin share");
         Assert.Empty(st.Drift); // the moved desired state is used
+    }
+
+    [Fact]
+    public void SharedSettingsOfTheStateFolderWinOverTheLocalOnes()
+    {
+        var local = Path.Combine(Tmp, "config.json");
+        var team = Path.Combine(Tmp, "team");
+        Directory.CreateDirectory(team);
+        File.WriteAllText(local, $$"""{"state": "{{team.Replace("\\", "\\\\")}}", "write": "modify", "scan_depth": 20}""");
+        File.WriteAllText(Path.Combine(team, Config.SharedFileName), """{"write": "no-delete", "scan_depth": 5, "hidden": ["CORP\\backup"]}""");
+        var cfg = Config.Load(local).WithShared();
+        Assert.Equal(("no-delete", 5, "CORP\\backup"), (cfg.Write, cfg.ScanDepth, cfg.Hidden.Single()));
+        Assert.Equal(M.DefaultFullControl, cfg.FullControl); // not in the shared file: as before
+    }
+
+    [Fact]
+    public void ChangingToAColleaguesStateFolderTakesOverItsSettings()
+    {
+        var (st, s) = SimClient();
+        var team = Path.Combine(Tmp, "team");
+        Directory.CreateDirectory(team);
+        File.WriteAllText(Path.Combine(team, Config.SharedFileName), """{"hidden": ["DEMO\\G-HR"], "full_control": ["SYSTEM", "Domain Admins"]}""");
+        var r = s.SaveSettings(new SettingsInput(20, "modify", ["DEMO\\G-IT"], [], team), ""); // what was typed loses
+        Assert.StartsWith("Now using the state folder", r.Message);
+        Assert.Equal(["DEMO\\G-HR"], st.Cfg.Hidden);
+        Assert.Equal(["SYSTEM", "Domain Admins"], st.Cfg.FullControl);
+        Assert.True(File.Exists(Directory.GetFiles(AppData, "desired-*.json").Single())); // nothing moved
+    }
+
+    [Fact]
+    public void MovingToAnEmptyStateFolderTakesTheSettingsAlong()
+    {
+        var (st, s) = SimClient();
+        var team = Path.Combine(Tmp, "team");
+        s.SaveSettings(new SettingsInput(20, "no-delete", ["DEMO\\G-IT"], [], team), "");
+        var shared = JsonNode.Parse(File.ReadAllText(Path.Combine(team, Config.SharedFileName)))!.AsObject();
+        Assert.Equal(("no-delete", "DEMO\\G-IT"), (shared.Str("write"), (string)shared["hidden"]![0]!));
+        Assert.Equal(Path.Combine(team, Config.SharedFileName), s.SettingsPage().SharedFile);
+        Assert.True(s.SettingsPage().SharedExists);
     }
 
     [Fact]

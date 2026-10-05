@@ -7,15 +7,14 @@
   return;
 }
 <p class="muted">
+  Scan, rights and hidden accounts are <b>shared</b>: they are kept in the state folder
+  (<span class="mono">@V.SharedFile</span>@(V.SharedExists ? "" : ", not written yet")) and apply to every admin who uses it.
+  This computer only remembers where the state folder is:
   @if (V.File is not null)
   {
-    <text>Read from </text><span class="mono">@V.File</span><text>.</text>
+    <text>read from </text><span class="mono">@V.File</span><text>, </text>
   }
-  else
-  {
-    <text>No config.json was read; owlseye runs with its defaults.</text>
-  }
-  Saving writes <span class="mono">@V.SaveTo</span>@(V.File is not null && V.SaveTo != V.File ? " (your own copy: the file in use cannot be written; owlseye reads your copy first from the next start)" : "").
+  <text>saved to </text><span class="mono">@V.SaveTo</span>@(V.File is not null && V.SaveTo != V.File ? " (your own copy: the file in use cannot be written; owlseye reads your copy first from the next start)" : "").
   Order at start: --config, then <span class="mono">%LOCALAPPDATA%\owlseye\config.json</span>, then config.json next to owlseye.exe.
 </p>
 @if (V.Blocked is not null)

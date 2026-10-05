@@ -19,6 +19,14 @@ public static class Launch
         bool scanInBackground = true, string? defaultProvider = null)
     {
         var cfg = Config.Load(configFile, mode, defaultProvider);
+        try
+        {
+            cfg = cfg.WithShared(); // the state folder's shared settings win
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            // state folder not reachable or file broken: the local settings apply, the settings page shows the folder
+        }
         M.Configure(cfg.Write, cfg.Hidden, cfg.FullControl); // before any provider scans or builds ACEs
         if (cfg.Provider == "sim" && !string.IsNullOrEmpty(path)) cfg = cfg with { SimDir = path };
         IProvider provider;
