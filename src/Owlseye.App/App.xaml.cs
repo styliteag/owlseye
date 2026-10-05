@@ -76,10 +76,8 @@ public partial class App : Application
         if (!HasWebView2())
         {
             ErrorLog.Write("startup", new InvalidOperationException("WebView2 runtime not found"));
-            MessageBox.Show(
-                "owlseye needs the Microsoft Edge WebView2 Runtime, which is missing on this machine (often on Windows Server "
-                + "2019/2022).\n\nInstall the Evergreen runtime from https://go.microsoft.com/fwlink/p/?LinkId=2124703 and start "
-                + "owlseye again.", "owlseye", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShutdownMode = ShutdownMode.OnExplicitShutdown; // closing the dialog must not end the app before Shutdown(3)
+            WebView2Missing.Show();
             Shutdown(3);
             return;
         }

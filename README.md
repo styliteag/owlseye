@@ -64,8 +64,11 @@ Data stays compatible with the PoC: `settings.json`, `desired-<share>.json` and 
 
 ## Running
 
-Prerequisites for building: .NET 10 SDK. To run: Windows 10/11 with the WebView2 runtime (part of Windows 11 and
-current Windows 10; on Windows Server 2019/2022 install the Evergreen runtime).
+Prerequisites for building: .NET 10 SDK. To run: Windows 10/11 or Windows Server with the Microsoft Edge WebView2
+Runtime. Windows 10/11 and Windows Server 2025 include it; on Windows Server 2019/2022 install it once as administrator,
+with the [online installer](https://go.microsoft.com/fwlink/?linkid=2124703) or, without internet access, the
+[offline installer (x64)](https://go.microsoft.com/fwlink/?linkid=2124701). If it is missing, owlseye says so at start
+and shows these links.
 
 ```
 dotnet run --project src/Owlseye.App -- --demo            # demo data, in memory
