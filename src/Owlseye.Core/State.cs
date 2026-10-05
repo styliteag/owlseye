@@ -39,6 +39,15 @@ public sealed class State
     /// <summary>Builds a provider for another share path (local/windows); null = the share is fixed.</summary>
     public Func<string, IProvider>? OpenShare { get; set; }
 
+    /// <summary>The config.json was given with --config: the settings page may only save there.</summary>
+    public bool ConfigFromCommandLine { get; set; }
+
+    /// <summary>New settings from the settings page (M.Configure is done by the caller); the matrix depth stays.</summary>
+    public void ApplySettings(Config cfg)
+    {
+        lock (Lock) Cfg = cfg with { MaxLevel = Cfg.MaxLevel };
+    }
+
     public string Actor { get; }
 
     /// <summary>What the start did that the admin should know (e.g. "Sim created: …"); shown once by the UI.</summary>

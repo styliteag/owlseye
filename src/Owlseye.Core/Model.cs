@@ -55,10 +55,21 @@ public static class M
 
     static HashSet<string> hiddenAccounts = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Applies config.json: what W means ("modify" or "no-delete") and further accounts to hide like the
-    /// administrators (SIDs or names, "DOMAIN\name" or "name"). Called once at start, before the provider scans.</summary>
-    public static void Configure(string write, IEnumerable<string> hidden)
+    /// <summary>The default of config.json "full_control": the accounts that must have full control on the share root
+    /// and on every folder with broken inheritance (Windows' default).</summary>
+    public static readonly IReadOnlyList<string> DefaultFullControl = ["SYSTEM", "Administrators"];
+
+    /// <summary>config.json "full_control" as given: SIDs, names ("DOMAIN\name", "name") or the words SYSTEM,
+    /// Administrators, Domain Admins (resolved against the scan, see Rights.RequiredFullControl).</summary>
+    public static IReadOnlyList<string> FullControl { get; private set; } = DefaultFullControl;
+
+    /// <summary>Applies config.json: what W means ("modify" or "no-delete"), further accounts to hide like the
+    /// administrators (SIDs or names, "DOMAIN\name" or "name") and the accounts that must have full control. Called at
+    /// start before the provider scans, and when the settings are saved.</summary>
+    public static void Configure(string write, IEnumerable<string> hidden, IEnumerable<string>? fullControl = null)
     {
+        var fc = (fullControl ?? DefaultFullControl).Select(x => x.Trim()).Where(x => x != "").ToList();
+        FullControl = fc.Count > 0 ? fc : DefaultFullControl;
         Write = write switch
         {
             "modify" => Modify,

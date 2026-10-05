@@ -19,7 +19,7 @@ public static class Launch
         bool scanInBackground = true, string? defaultProvider = null)
     {
         var cfg = Config.Load(configFile, mode, defaultProvider);
-        M.Configure(cfg.Write, cfg.Hidden); // before any provider scans or builds ACEs
+        M.Configure(cfg.Write, cfg.Hidden, cfg.FullControl); // before any provider scans or builds ACEs
         if (cfg.Provider == "sim" && !string.IsNullOrEmpty(path)) cfg = cfg with { SimDir = path };
         IProvider provider;
         Func<string, IProvider>? openShare = null;
@@ -53,20 +53,27 @@ public static class Launch
             provider = new SimProvider(cfg.SimPath, cfg.ScanDepth);
         }
         else provider = new DemoProvider();
-        var st = new State(cfg, provider) { OpenShare = openShare, StartNotice = notice };
+        var st = new State(cfg, provider) { StartNotice = notice };
+        if (openShare is not null) st.OpenShare = p => shareProvider!(st.Cfg, p); // scan depth as set now
         if (scanInBackground) st.LoadInBackground();
         else st.Load();
         return st;
     }
 
-    /// <summary>The config.json to read: the one given with --config, else one next to the exe (an admin may put it
-    /// there, e.g. on the admin share), else none.</summary>
+    /// <summary>The config.json to read: the one given with --config, else the admin's own one in the data folder
+    /// (written by the settings page), else one next to the exe (put there for everyone, e.g. on the admin share), else
+    /// none.</summary>
     public static string? ConfigFile(string? explicitFile, string exeDir)
     {
         if (explicitFile is not null) return explicitFile;
+        var own = PersonalConfig;
+        if (File.Exists(own)) return own;
         var next = Path.Combine(exeDir, "config.json");
         return File.Exists(next) ? next : null;
     }
+
+    /// <summary>%LOCALAPPDATA%\owlseye\config.json: where the settings page saves when there is no writable config.json.</summary>
+    public static string PersonalConfig => Path.Combine(Paths.DataDir(), "config.json");
 
     /// <summary>Explicit path > folder opened last (UI) > share from config.json; "" if none.</summary>
     public static string ShareToOpen(Config cfg, string? explicitPath)

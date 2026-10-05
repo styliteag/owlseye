@@ -75,9 +75,14 @@ public sealed record Options(string? Mode, string? Path, string? Config, bool Se
 public static class Boot
 {
     /// <summary>Config + provider + state for the options (rules in Launch); the first scan runs in the background.</summary>
-    public static State Build(Options o) => Launch.Build(o.Mode, o.Path, Launch.ConfigFile(o.Config, AppContext.BaseDirectory),
-        (cfg, share) => cfg.Provider == "local"
-            ? new LocalProvider(share, cfg.ScanDepth)
-            : new WindowsProvider(share, cfg.ScanDepth),
-        defaultProvider: Machine.Domain() is null ? "local" : "windows");
+    public static State Build(Options o)
+    {
+        var st = Launch.Build(o.Mode, o.Path, Launch.ConfigFile(o.Config, AppContext.BaseDirectory),
+            (cfg, share) => cfg.Provider == "local"
+                ? new LocalProvider(share, cfg.ScanDepth)
+                : new WindowsProvider(share, cfg.ScanDepth),
+            defaultProvider: Machine.Domain() is null ? "local" : "windows");
+        st.ConfigFromCommandLine = o.Config is not null;
+        return st;
+    }
 }

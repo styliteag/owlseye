@@ -29,6 +29,10 @@ public sealed record Config
     public string Baseline { get; init; } = ""; // folder for desired-<share>.json; empty = AppData (demo: memory only)
     public string Write { get; init; } = "modify"; // what W means: "modify" (with delete) or "no-delete"
     public IReadOnlyList<string> Hidden { get; init; } = []; // further accounts to hide like the administrators
+    public IReadOnlyList<string> FullControl { get; init; } = M.DefaultFullControl; // must have full control (root, broken inheritance)
+
+    /// <summary>The config.json this configuration was read from; null if none.</summary>
+    public string? File { get; init; }
 
     public string? BaselineDir => Baseline != "" ? Baseline : Provider == "demo" ? null : Paths.DataDir();
 
@@ -39,7 +43,7 @@ public sealed record Config
     /// <summary>provider: from the command line, wins over the file. defaultProvider: if neither names one.</summary>
     public static Config Load(string? path, string? provider = null, string? defaultProvider = null)
     {
-        var raw = path is not null ? JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? [] : [];
+        var raw = path is not null ? JsonNode.Parse(System.IO.File.ReadAllText(path)) as JsonObject ?? [] : [];
         var c = new Config(); // unknown keys (dl_ou, gg_ous) are ignored
         c = c with
         {
@@ -51,9 +55,28 @@ public sealed record Config
             SimDir = raw.Str("sim_dir") ?? c.SimDir,
             Baseline = raw.Str("baseline") ?? c.Baseline,
             Write = raw.Str("write") ?? c.Write,
-            Hidden = raw["hidden"] is JsonArray h ? h.Select(n => n?.GetValue<string>() ?? "").Where(s => s != "").ToList() : c.Hidden,
+            Hidden = Strings(raw["hidden"]) ?? c.Hidden,
+            FullControl = Strings(raw["full_control"]) is { Count: > 0 } fc ? fc : c.FullControl,
+            File = path,
         };
         return provider is not null ? c with { Provider = provider } : c;
+    }
+
+    static List<string>? Strings(JsonNode? n) =>
+        n is JsonArray a ? a.Select(x => x?.GetValue<string>() ?? "").Select(s => s.Trim()).Where(s => s != "").ToList() : null;
+
+    /// <summary>The settings page's keys into a config.json: the other keys of an existing file stay as they are.</summary>
+    public static void Save(string path, Config c)
+    {
+        var raw = System.IO.File.Exists(path) ? JsonNode.Parse(System.IO.File.ReadAllText(path)) as JsonObject ?? [] : [];
+        raw["scan_depth"] = c.ScanDepth;
+        raw["write"] = c.Write;
+        raw["hidden"] = new JsonArray(c.Hidden.Select(h => (JsonNode)h!).ToArray());
+        raw["full_control"] = new JsonArray(c.FullControl.Select(h => (JsonNode)h!).ToArray());
+        raw["audit"] = c.Audit;
+        raw["baseline"] = c.Baseline;
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        Json.WriteAtomic(path, Json.Pretty(raw), ".config-");
     }
 }
 

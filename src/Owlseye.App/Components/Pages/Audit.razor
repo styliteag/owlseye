@@ -29,6 +29,14 @@
           {
             <span class="loss">Desired state deleted</span> <span class="mono muted">@e.Str("path")</span>
           }
+          @if (kind == "settings")
+          {
+            <span>Settings changed</span> <span class="mono muted">@e.Str("file")</span><br>
+            @foreach (var (key, change) in e.Obj("changes") ?? [])
+            {
+              <span class="muted">@key:</span> <span class="mono">@Short(change?["before"]) → @Short(change?["after"])</span><br>
+            }
+          }
           @if (kind == "change_start")
           {
             var missing = (e.Arr("missing") ?? []).Select(m => m is JsonValue mv && mv.TryGetValue<string>(out var ms) ? ms : m?.ToJsonString() ?? "").ToList();
@@ -122,6 +130,14 @@ else
 
 @code {
   AuditView? V;
+
+  /// <summary>A setting's value for the log: a list as "a, b", empty as "–".</summary>
+  static string Short(JsonNode? n) => n switch
+  {
+    null => "–",
+    JsonArray a => a.Count == 0 ? "–" : string.Join(", ", a.Select(x => x?.ToString())),
+    _ => n.ToString() is { Length: > 0 } s ? s : "–",
+  };
 
   protected override void Refresh() => V = S.AuditPage();
 

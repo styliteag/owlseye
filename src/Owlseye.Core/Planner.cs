@@ -55,13 +55,14 @@ public static class Planner
             l.Add((sid, v));
         }
         var folders = new Dictionary<string, Folder>(work.Folders);
+        var required = Rights.RequiredFullControl(work);
         foreach (var path in byPath.Keys.Union(touched))
         {
             var f = folders[path];
             IEnumerable<Ace> ex = f.Explicit;
             foreach (var (sid, v) in byPath.GetValueOrDefault(path) ?? [])
                 ex = Acl.SetCell(ex, work.Principals[sid], v);
-            if (f.Protected) ex = Acl.EnsureAdmins(ex);
+            if (f.Protected) ex = Acl.EnsureAdmins(ex, required);
             folders[path] = f with { Aces = [.. Acl.Canonical(ex), .. f.Aces.Where(a => a.Inherited)] };
         }
         return work with { Folders = folders };

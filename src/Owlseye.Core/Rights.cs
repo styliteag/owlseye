@@ -116,6 +116,56 @@ public static class Rights
         return (value, aces.Count == 1 && a0.Mask == std.Mask && (a0.Flags & ~0x10) == std.Flags);
     }
 
+    /// <summary>The accounts of config.json "full_control" (default SYSTEM, Administrators) as they appear in this
+    /// share's ACLs: SIDs as given; SYSTEM, Administrators and Domain Admins (RID 512 of the domain the share's accounts
+    /// belong to) by these words in any language; other names ("DOMAIN\name" or "name") looked up among the accounts
+    /// owlseye read and in the ACLs. Names it cannot find are left out.</summary>
+    public static List<Principal> RequiredFullControl(Snapshot snap)
+    {
+        var o = new List<Principal>();
+        string? domain = null; // S-1-5-21-a-b-c of the share's accounts
+        string? DomainSid()
+        {
+            if (domain is not null) return domain;
+            var sid = snap.Principals.Keys.Concat(snap.Groups.Values.Select(g => g.Sid)).Concat(snap.Users.Values.Select(u => u.Sid))
+                .Concat(snap.Folders.Values.SelectMany(f => f.Aces).Select(a => a.Sid))
+                .FirstOrDefault(x => x.StartsWith("S-1-5-21-", StringComparison.Ordinal) && x.Count(c => c == '-') == 7);
+            return domain = sid?[..sid.LastIndexOf('-')];
+        }
+        Dictionary<string, string>? names = null; // lowercased "DOMAIN\name" and "name" -> sid
+        string? ByName(string n)
+        {
+            if (names is null)
+            {
+                names = new Dictionary<string, string>();
+                void Add(string sid, string name)
+                {
+                    if (sid == "" || name == "") return;
+                    names.TryAdd(name.ToLowerInvariant(), sid);
+                    names.TryAdd(name[(name.LastIndexOf('\\') + 1)..].ToLowerInvariant(), sid);
+                }
+                foreach (var p in snap.Principals.Values) Add(p.Sid, p.Name);
+                foreach (var g in snap.Groups.Values) Add(g.Sid, g.Sam);
+                foreach (var a in snap.Folders.Values.SelectMany(f => f.Aces)) Add(a.Sid, a.Name);
+            }
+            return names.GetValueOrDefault(n.ToLowerInvariant());
+        }
+        foreach (var x in M.FullControl)
+        {
+            var (sid, label) = x.ToLowerInvariant() switch
+            {
+                "system" or "nt authority\\system" => (M.System, "SYSTEM"),
+                "administrators" or "builtin\\administrators" => (M.Admins, "Administrators"),
+                "domain admins" => (DomainSid() is { } d ? d + "-512" : null, "Domain Admins"),
+                _ when M.IsSid(x) => (x, x),
+                _ => (ByName(x), x[(x.LastIndexOf('\\') + 1)..]),
+            };
+            if (sid is null || o.Any(p => p.Sid == sid)) continue;
+            o.Add(new Principal(sid, label == x && M.IsSid(x) ? snap.Principals.GetValueOrDefault(x)?.Name ?? x : label, "group"));
+        }
+        return o;
+    }
+
     /// <summary>Full control on this folder, its subfolders and files (one entry, or several that add up to it).</summary>
     public static bool IsFullControl(IReadOnlyList<Ace> aces) =>
         aces.Where(a => (a.Flags & M.InheritOnly) == 0 && (a.Flags & M.OiCi) == M.OiCi)
@@ -367,6 +417,7 @@ public static class Rights
 
     public static List<Finding> Findings(Snapshot snap, int maxLevel = 3, Dictionary<(string Sid, string Path), Cell>? cells = null)
     {
+        var required = RequiredFullControl(snap);
         cells ??= Matrix(snap);
         var o = new List<Finding>();
         foreach (var (path, f) in snap.Folders.OrderBy(kv => kv.Key, StringComparer.Ordinal))
@@ -379,8 +430,7 @@ public static class Rights
             {
                 var full = f.Explicit.Where(a => a.Allow && (a.Mask & M.Full) == M.Full && (a.Flags & M.OiCi) == M.OiCi)
                     .Select(a => a.Sid).ToHashSet();
-                var missing = new[] { (M.System, "SYSTEM"), (M.Admins, "Administrators") }
-                    .Where(x => !full.Contains(x.Item1)).Select(x => x.Item2).ToList();
+                var missing = required.Where(x => !full.Contains(x.Sid)).Select(x => x.Short).ToList();
                 if (missing.Count > 0) o.Add(new("medium", path, $"{string.Join(" and ", missing)} without full control here"));
             }
             foreach (var a in f.Explicit)

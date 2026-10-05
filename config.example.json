@@ -4,5 +4,6 @@
   "max_level": 3,
   "audit": "\\\\fs01\\Owlseye$\\audit.jsonl",
   "write": "modify",
-  "hidden": ["CORP\\backup"]
+  "hidden": ["CORP\\backup"],
+  "full_control": ["SYSTEM", "Domain Admins"]
 }

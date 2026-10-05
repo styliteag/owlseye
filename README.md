@@ -30,7 +30,7 @@ The masks live in one place (`src/Owlseye.Core/Model.cs`: `M.Read`, `M.Write`, `
 
 - **R| automatic:** When a group gets a right on a folder, owlseye sets `R|` on every parent folder up to the root that the group cannot otherwise enter. "Enter" means: an own (or inherited) entry there, or every member already gets in via another group (typically `G-AllUsers` with `R|` on the root). When the last right below goes away, this `R|` goes too. An `R|` set by hand stays. Missing `R|` is a finding.
 - **Inheritance** (`[-]` in the Excel list, `⛔` in the matrix): `R`/`W` pass into subfolders until one is protected; `R|`/`W|` do not. Toggle on any folder except the root. Breaking copies all inherited entries as own entries (nobody loses access), then you remove selectively. Restoring removes explicit copies of what the parent folder inherits. **Clear** resets a folder to the default like a new one: inheritance on, no own entries (deny and special entries go too), the automatically set `R|` above disappears with it.
-- **Hidden accounts:** SYSTEM, Administrators, Creator Owner, the domain's Domain Admins (RID 512) and Enterprise Admins (RID 519), whatever their name in the domain's language, and the accounts listed under `hidden` in config.json (by SID, `DOMAIN\name` or `name`) are no columns; owlseye leaves their entries alone. When writing a protected folder (and the root), owlseye makes sure both have full control; if that is missing anywhere, it is a finding. Creator Owner stays unchanged.
+- **Hidden accounts:** SYSTEM, Administrators, Creator Owner, the domain's Domain Admins (RID 512) and Enterprise Admins (RID 519), whatever their name in the domain's language, and the accounts listed under `hidden` in config.json (by SID, `DOMAIN\name` or `name`) are no columns; owlseye leaves their entries alone. When writing a protected folder (and the root), owlseye makes sure the accounts of `full_control` have full control, by default SYSTEM and Administrators (the file server's own group); if that is missing anywhere, it is a finding. Shares that use the Domain Admins instead set `"full_control": ["SYSTEM", "Domain Admins"]`. Creator Owner stays unchanged.
 - **What owlseye does not touch:** deny entries, entries of other accounts on a changed folder, ACLs with other ACE types (e.g. conditional), paths across junctions/symlinks.
 
 ## Structure
@@ -112,7 +112,12 @@ owlseye always works with UNC. `max_level` (default 3) is the default matrix dep
 `scan_depth` limits how deep owlseye reads (default 20; 0 = whole tree). `write` says what `W` means: `"modify"`
 (default, read, write and delete, as Windows and most shares use it) or `"no-delete"` (read and write without delete).
 `hidden` lists further accounts that are not shown and not touched, e.g. a backup group with full control everywhere:
-`"hidden": ["CORP\\backup"]`.
+`"hidden": ["CORP\\backup"]`. `full_control` lists the accounts that must have full control on the root and on folders
+with broken inheritance (default `["SYSTEM", "Administrators"]`; also `Domain Admins` in any language, SIDs or names).
+
+All of these except provider and share can be changed on the **Settings** page; every change is logged. It saves to the
+config.json in use if it can be written, otherwise to `%LOCALAPPDATA%\owlseye\config.json`, which owlseye reads at the
+next start before a config.json next to the exe (order: `--config`, then that file, then the one next to the exe).
 
 ### Installing
 

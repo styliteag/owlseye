@@ -58,12 +58,14 @@ public static class Acl
         return rest;
     }
 
-    /// <summary>SYSTEM and Administrators with full control (inherited), where missing.</summary>
-    public static List<Ace> EnsureAdmins(IEnumerable<Ace> explicitAces)
+    /// <summary>The accounts that must have full control (config.json "full_control", by default SYSTEM and
+    /// Administrators) with full control on this folder, subfolders and files, where missing.</summary>
+    public static List<Ace> EnsureAdmins(IEnumerable<Ace> explicitAces, IReadOnlyList<Principal> required)
     {
         var list = explicitAces.ToList();
         var have = list.Where(a => a.Allow && (a.Mask & M.Full) == M.Full && (a.Flags & M.OiCi) == M.OiCi).Select(a => a.Sid).ToHashSet();
-        list.AddRange(AdminAces.Where(a => !have.Contains(a.Sid)));
+        list.AddRange(required.Where(p => !have.Contains(p.Sid)).Select(p =>
+            AdminAces.FirstOrDefault(a => a.Sid == p.Sid) ?? new Ace(p.Sid, p.Name, p.Kind, M.Full, Flags: M.OiCi)));
         return list;
     }
 

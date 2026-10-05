@@ -1,0 +1,95 @@
+@page "/settings"
+@inherits PageBase
+
+<h1>Settings</h1>
+@if (V is null)
+{
+  return;
+}
+<p class="muted">
+  @if (V.File is not null)
+  {
+    <text>Read from </text><span class="mono">@V.File</span><text>.</text>
+  }
+  else
+  {
+    <text>No config.json was read; owlseye runs with its defaults.</text>
+  }
+  Saving writes <span class="mono">@V.SaveTo</span>@(V.File is not null && V.SaveTo != V.File ? " (your own copy: the file in use cannot be written; owlseye reads your copy first from the next start)" : "").
+  Order at start: --config, then <span class="mono">%LOCALAPPDATA%\owlseye\config.json</span>, then config.json next to owlseye.exe.
+</p>
+@if (V.Blocked is not null)
+{
+  <div class="flash err">@V.Blocked</div>
+}
+
+<form class="settings" @onsubmit="Save">
+  <section>
+    <h2>Scan</h2>
+    <label>Scan depth <input type="number" min="0" max="100" @bind="scanDepth"></label>
+    <p class="muted small">Levels owlseye reads (0 = the whole tree). Below that, owlseye sees neither entries that deviate
+      nor changes made outside it. The matrix depth (what is shown) is set in the matrix.</p>
+  </section>
+
+  <section>
+    <h2>Rights</h2>
+    <p>W means:
+      <label><input type="radio" name="write" checked="@(write == "modify")" @onchange="@(() => write = "modify")"> Modify (read, write and delete)</label>
+      <label><input type="radio" name="write" checked="@(write == "no-delete")" @onchange="@(() => write = "no-delete")"> Read and write, no delete</label>
+    </p>
+    <label>Accounts that must have full control on the root and on folders with broken inheritance
+      <textarea rows="4" @bind="fullControl" placeholder="SYSTEM&#10;Administrators"></textarea></label>
+    <p class="muted small">One per line: SYSTEM, Administrators (the file server's own group), Domain Admins (in any
+      language), a SID or a name like CORP\backup. Missing ones are findings, and owlseye adds them when it writes such a
+      folder. Empty = SYSTEM and Administrators.
+      @if (V.Required.Count > 0)
+      {
+        <br><text>Found in this share: </text>@string.Join(", ", V.Required.Select(p => $"{p.Name} ({p.Sid})"))
+      }
+    </p>
+    <label>Further accounts to hide (no column, entries left alone)
+      <textarea rows="3" @bind="hidden" placeholder="CORP\backup"></textarea></label>
+    <p class="muted small">One per line, SID or name. SYSTEM, Administrators, Creator Owner, Domain Admins and Enterprise
+      Admins are always hidden.</p>
+  </section>
+
+  <section>
+    <h2>Files</h2>
+    <label>Log file <input type="text" @bind="audit" placeholder="@V.AuditPath"></label>
+    <label>Desired-state folder <input type="text" @bind="baseline" placeholder="@(V.BaselineDir ?? "memory only (demo)")"></label>
+    <p class="muted small">Empty = the defaults shown. For several admins put both on the admin share. These two apply at the next start.</p>
+  </section>
+
+  <div class="applyform">
+    <input type="text" @bind="reason" placeholder="Reason (goes into the log)">
+    <button type="submit" class="primary" disabled="@(!V.CanSave || Ui.Busy)">Save</button>
+  </div>
+</form>
+
+@code {
+  SettingsView? V;
+  int scanDepth;
+  string write = "modify", fullControl = "", hidden = "", audit = "", baseline = "", reason = "";
+  bool loaded;
+
+  protected override void Refresh()
+  {
+    V = S.SettingsPage();
+    if (loaded) return; // keep what is being edited when the state changes
+    loaded = true;
+    scanDepth = V.ScanDepth;
+    write = V.Write;
+    fullControl = string.Join("\n", V.FullControl);
+    hidden = string.Join("\n", V.Hidden);
+    audit = V.Audit;
+    baseline = V.Baseline;
+  }
+
+  Task Save()
+  {
+    var input = new SettingsInput(scanDepth, write, hidden.Split('\n'), fullControl.Split('\n'), audit, baseline);
+    var r = reason;
+    loaded = false; // show what was saved
+    return Busy(() => S.SaveSettings(input, r));
+  }
+}
