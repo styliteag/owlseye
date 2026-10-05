@@ -140,7 +140,8 @@ extracted at run time. To run owlseye elevated, install the folder where only ad
 `C:\Program Files\owlseye`), see [Security](#security).
 Tests: `dotnet test`. UI smoke test (starts the exe in demo mode and clicks through matrix, preview, apply, log, undo
 and the other pages; Node 22+): `node tests/e2e/smoke.mjs publish/owlseye.exe`. CI (`.github/workflows/ci.yml`) runs
-the tests and the build on Windows for every push to a branch and keeps the publish folder as an artifact; the smoke
+the tests and the build on Windows for pull requests and by hand (Actions tab, "Run workflow") and keeps the publish
+folder as an artifact; releases are built by `release.yml` (see below), not on every push. The smoke
 test is not part of it, because on GitHub's runners WebView2 never opens the debugging port the test drives the window
 through (the app itself runs fine there). The smoke test needs that port, which an elevated owlseye refuses;
 `tests/e2e/smoke-ci.ps1` runs it as a temporary standard user when started as administrator.

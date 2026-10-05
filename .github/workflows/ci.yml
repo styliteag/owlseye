@@ -1,9 +1,10 @@
 name: ci
 
+# Pull requests and by hand (Actions tab, "Run workflow"). Not on every push: a release tag runs release.yml, which
+# tests and builds as well, and the tests run locally before each push.
 on:
-  push:
-    branches: ['**'] # tags run release.yml
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
