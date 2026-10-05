@@ -30,18 +30,56 @@ public static class M
     public const int ObjectInherit = 0x1, ContainerInherit = 0x2, InheritOnly = 0x8, InheritedAce = 0x10;
     public const int OiCi = ObjectInherit | ContainerInherit, ThisFolder = 0x0;
     public const uint Read = 0x1200A9; // Read, execute
-    public const uint Write = Read | 0x116; // + write (create files, append data, attributes); no delete, unlike "Modify"
+    public const uint WriteNoDelete = Read | 0x116; // + write (create files, append data, attributes), no delete
+    public const uint Modify = WriteNoDelete | Delete; // Windows "Modify": read, execute, write and delete
     public const uint Full = 0x1F01FF;
+    public const uint Delete = 0x10000, DeleteChild = 0x40, WriteDac = 0x40000, WriteOwner = 0x80000;
 
-    public static readonly IReadOnlyDictionary<string, (uint Mask, int Flags)> Standard = new Dictionary<string, (uint, int)>
+    /// <summary>The mask of W: Modify (default, as Windows and most shares use it) or write without delete
+    /// (config "write": "no-delete"). Set once at start by <see cref="Configure"/>.</summary>
+    public static uint Write { get; private set; } = Modify;
+
+    public static IReadOnlyDictionary<string, (uint Mask, int Flags)> Standard { get; private set; } = StandardFor(Modify);
+
+    static Dictionary<string, (uint Mask, int Flags)> StandardFor(uint write) => new()
     {
         ["R|"] = (Read, ThisFolder),
         ["R"] = (Read, OiCi),
-        ["W|"] = (Write, ThisFolder),
-        ["W"] = (Write, OiCi),
+        ["W|"] = (write, ThisFolder),
+        ["W"] = (write, OiCi),
     };
 
     public const string System = "S-1-5-18", Admins = "S-1-5-32-544", CreatorOwner = "S-1-3-0", OwnerRights = "S-1-3-4";
+
+    static HashSet<string> hiddenAccounts = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Applies config.json: what W means ("modify" or "no-delete") and further accounts to hide like the
+    /// administrators (SIDs or names, "DOMAIN\name" or "name"). Called once at start, before the provider scans.</summary>
+    public static void Configure(string write, IEnumerable<string> hidden)
+    {
+        Write = write switch
+        {
+            "modify" => Modify,
+            "no-delete" => WriteNoDelete,
+            _ => throw new ArgumentException($"config.json: \"write\" must be \"modify\" or \"no-delete\", not \"{write}\""),
+        };
+        Standard = StandardFor(Write);
+        hiddenAccounts = new HashSet<string>(hidden.Select(h => h.Trim()).Where(h => h != ""), StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Accounts that are not matrix columns and whose entries owlseye leaves alone: SYSTEM, Administrators,
+    /// Creator Owner, Owner Rights, the domain's Domain Admins (RID 512) and Enterprise Admins (RID 519), and the
+    /// accounts listed under "hidden" in config.json (by SID, "DOMAIN\name" or "name").</summary>
+    public static bool IsHidden(string sid, string? name = null)
+    {
+        if (Hidden.Contains(sid)) return true;
+        if (sid.StartsWith("S-1-5-21-", StringComparison.Ordinal) && sid.Count(c => c == '-') == 7
+            && (sid.EndsWith("-512", StringComparison.Ordinal) || sid.EndsWith("-519", StringComparison.Ordinal)))
+            return true;
+        if (hiddenAccounts.Count == 0) return false;
+        if (hiddenAccounts.Contains(sid)) return true;
+        return name is not null && (hiddenAccounts.Contains(name) || hiddenAccounts.Contains(name[(name.LastIndexOf('\\') + 1)..]));
+    }
 
     /// <summary>Not in the matrix. owlseye sets SYSTEM and Administrators itself on protected folders (full control).</summary>
     public static readonly IReadOnlySet<string> Hidden = new HashSet<string> { System, Admins, CreatorOwner, OwnerRights };

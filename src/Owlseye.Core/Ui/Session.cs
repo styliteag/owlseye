@@ -29,8 +29,8 @@ public sealed class Session(State st)
         }
         if (c is { Direct: not null } && c.Source == path)
         {
-            var tip = $"Entry here: {Labels.Label(c.Direct)}" + (c.Standard ? "" : " (non-standard entry)");
-            return new CellInfo(c.Direct, "direct", tip, path, c.Standard);
+            var tip = c.Full ? "Entry here: Full control" : $"Entry here: {Labels.Label(c.Direct)}" + (c.Standard ? "" : " (non-standard entry)");
+            return new CellInfo(c.Direct, "direct", tip, path, c.Standard, Full: c.Full);
         }
         if (c is { Effective: not null })
         {
@@ -126,11 +126,13 @@ public sealed class Session(State st)
             var current = cells.GetValueOrDefault((sid, path))?.Direct;
             var members = Rights.MembersOf(snap, sid, Cache(snap)?.Transitive);
             var writable = !f.OtherAces;
+            var own = f.Explicit.Where(a => a.Sid == sid).ToList(); // what is really there, for a special entry
             return new CellPanel(p, f, info, writable ? [null, .. M.Cells] : [], current,
                 members?.Select(u => snap.Users[u]).ToList(),
                 St.CanToggleInheritance(f) && !ProtectedAfter(f),
                 St.CanToggleInheritance(f) && ProtectedAfter(f),
-                St.Cfg.MaxLevel);
+                St.Cfg.MaxLevel,
+                own.Count > 0 && !info.Standard ? Labels.Describe(own) : null);
         }
     }
 
@@ -342,7 +344,8 @@ public sealed class Session(State st)
         var gained = plan?.Impact.Where(Planner.Gained).ToList() ?? [];
         var lost = plan?.Impact.Where(i => !Planner.Gained(i)).ToList() ?? [];
         var cells = plan?.AclOps.Sum(o => o.Changes.Count) ?? 0;
-        return new PreviewView(plan, err, gained, lost, cells, plan is not null ? State.PlanHash(plan) : "");
+        return new PreviewView(plan, err, gained, lost, cells, plan is not null ? State.PlanHash(plan) : "",
+            plan is not null ? Planner.HiddenLosses(plan) : []);
     }
 
     /// <summary>Checks against the file system as it is now, not against the snapshot: the new ACL is computed from the

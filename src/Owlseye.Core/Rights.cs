@@ -7,9 +7,10 @@
 
 namespace Owlseye;
 
-public sealed record Explicit(string Value, bool Standard);
+/// <param name="Full">the entry is full control (shown as F; for the rights computation it counts as W)</param>
+public sealed record Explicit(string Value, bool Standard, bool Full = false);
 
-public sealed record Cell(string? Direct, string? Effective, string? Source, bool Standard = true);
+public sealed record Cell(string? Direct, string? Effective, string? Source, bool Standard = true, bool Full = false);
 
 public sealed record Finding(string Severity, string Path, string Text);
 
@@ -115,13 +116,18 @@ public static class Rights
         return (value, aces.Count == 1 && a0.Mask == std.Mask && (a0.Flags & ~0x10) == std.Flags);
     }
 
-    /// <summary>(sid, path) -> explicit entry. Only Allow ACEs, without SYSTEM/Administrators/Creator Owner.</summary>
+    /// <summary>Full control on this folder, its subfolders and files (one entry, or several that add up to it).</summary>
+    public static bool IsFullControl(IReadOnlyList<Ace> aces) =>
+        aces.Where(a => (a.Flags & M.InheritOnly) == 0 && (a.Flags & M.OiCi) == M.OiCi)
+            .Aggregate(0u, (m, a) => m | a.Mask) is var mask && (mask & M.Full) == M.Full;
+
+    /// <summary>(sid, path) -> explicit entry. Only Allow ACEs, without the hidden accounts (SYSTEM, Administrators, …).</summary>
     public static Dictionary<(string Sid, string Path), Explicit> ExplicitCells(Snapshot snap)
     {
         var by = new Dictionary<(string, string), List<Ace>>();
         foreach (var (path, f) in snap.Folders)
             foreach (var a in f.Explicit)
-                if (a.Allow && !M.Hidden.Contains(a.Sid))
+                if (a.Allow && !M.IsHidden(a.Sid, a.Name))
                 {
                     if (!by.TryGetValue((a.Sid, path), out var l)) by[(a.Sid, path)] = l = [];
                     l.Add(a);
@@ -130,7 +136,7 @@ public static class Rights
         foreach (var (k, v) in by)
         {
             var (value, standard) = Classify(v);
-            o[k] = new Explicit(value!, standard);
+            o[k] = new Explicit(value!, standard, IsFullControl(v));
         }
         return o;
     }
@@ -141,7 +147,7 @@ public static class Rights
         if (!snap.Folders.TryGetValue("", out var root) || root.Protected) return [];
         var by = new Dictionary<string, List<Ace>>();
         foreach (var a in root.Aces)
-            if (a.Inherited && a.Allow && !M.Hidden.Contains(a.Sid) && (a.Flags & M.OiCi) != 0)
+            if (a.Inherited && a.Allow && !M.IsHidden(a.Sid, a.Name) && (a.Flags & M.OiCi) != 0)
             {
                 if (!by.TryGetValue(a.Sid, out var l)) by[a.Sid] = l = [];
                 l.Add(a);
@@ -187,7 +193,7 @@ public static class Rights
                 string? inh = null, src = null;
                 if (incoming.TryGetValue(sid, out var i)) (inh, src) = (i.V, i.Src);
                 var (eff, esrc) = M.Rank(d) >= M.Rank(inh) ? (d, f.Path) : (inh, src);
-                o[(sid, f.Path)] = new Cell(d, eff, esrc, e?.Standard ?? true);
+                o[(sid, f.Path)] = new Cell(d, eff, esrc, e?.Standard ?? true, e?.Full ?? false);
             }
         }
         return o;
@@ -244,7 +250,7 @@ public static class Rights
     /// <summary>Does the folder have something of its own (entries, broken inheritance, read error)? Below the
     /// matrix depth this is a deviation and is shown; folders that only inherit are not.</summary>
     public static bool Deviates(Folder f) =>
-        f.Protected || f.Error != "" || f.OtherAces || f.Explicit.Any(a => !M.Hidden.Contains(a.Sid));
+        f.Protected || f.Error != "" || f.OtherAces || f.Explicit.Any(a => !M.IsHidden(a.Sid, a.Name));
 
     /// <summary>user_dn -> {path: strongest effective right} (folders with access, up to maxLevel; null = all).</summary>
     public static Dictionary<string, Dictionary<string, string>> UserRights(Snapshot snap, int? maxLevel = null,
@@ -379,7 +385,7 @@ public static class Rights
             }
             foreach (var a in f.Explicit)
             {
-                if (M.Hidden.Contains(a.Sid)) continue;
+                if (M.IsHidden(a.Sid, a.Name)) continue;
                 if (!a.Allow) o.Add(new("medium", path, $"Deny entry for {a.Name}"));
                 else if (a.Kind == "unknown") o.Add(new("high", path, $"Unresolved SID {a.Sid}"));
                 else if (Broad.ContainsKey(a.Sid) && f.Level > 0 && (a.Flags & M.OiCi) != 0)

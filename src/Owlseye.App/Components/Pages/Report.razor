@@ -49,9 +49,11 @@
       <div class="card"><b class="@(R.Findings.Any(f => f.Severity == "high") ? "loss" : "")">@R.Findings.Count</b>findings</div>
       <div class="card"><b>@R.Changes.Count</b>changes in @R.ChangeDays days</div>
     </div>
-    <p class="small muted">Rights: <b>W</b> read and write, <b>R</b> read (this folder and everything below), <b>W|</b> / <b>R|</b>
-      this folder only; <span class="inh">(W)</span> inherited from a parent folder; <b>*</b> a special entry (not one of the four
-      standard entries); ⛔ inheritance broken. SYSTEM, Administrators and Creator Owner are not listed.</p>
+    <p class="small muted">Rights: <b>W</b> @(M.Write == M.Modify ? "modify (read, write and delete)" : "read and write (no delete)"),
+      <b>R</b> read (this folder and everything below), <b>W|</b> / <b>R|</b> this folder only; <span class="inh">(W)</span> inherited
+      from a parent folder; <b>F</b> full control; <b>*</b> another special entry (not one of the four standard entries);
+      ⛔ inheritance broken. SYSTEM, Administrators, Creator Owner, Domain Admins and the accounts hidden in config.json are
+      not listed.</p>
   </section>
 
   <section>

@@ -16,11 +16,11 @@ public class AclModelTests : TestBase
 
     [Theory]
     [InlineData(M.Read, M.OiCi, "R", true)]
-    [InlineData(M.Write, M.OiCi, "W", true)]
+    [InlineData(M.Modify, M.OiCi, "W", true)] // W is Modify by default ("write": "modify")
     [InlineData(M.Read, 0, "R|", true)]
-    [InlineData(M.Write, 0, "W|", true)]
-    [InlineData(M.Full, M.OiCi, "W", false)] // Vollzugriff: Sondereintrag, angezeigt als W
-    [InlineData(0x1301BFu, M.OiCi, "W", false)] // Modify
+    [InlineData(M.Modify, 0, "W|", true)]
+    [InlineData(M.Full, M.OiCi, "W", false)] // full control: special entry, shown as F
+    [InlineData(M.WriteNoDelete, M.OiCi, "W", false)] // write without delete: special unless "write": "no-delete"
     [InlineData(0x100021u, 0, "R|", false)] // list/traverse only
     public void Classify(uint mask, int flags, string value, bool standard)
     {

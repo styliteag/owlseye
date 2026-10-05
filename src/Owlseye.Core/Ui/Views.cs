@@ -30,12 +30,42 @@ public static class Labels
         null => "No access",
         "R|" => "R| List (this folder only)",
         "R" => "R Read",
-        "W|" => "W| Write (this folder only)",
-        "W" => "W Write",
+        "W|" => M.Write == M.Modify ? "W| Modify (this folder only)" : "W| Write, no delete (this folder only)",
+        "W" => M.Write == M.Modify ? "W Modify" : "W Write, no delete",
         _ => v,
     };
 
     public static string Short(string? v) => v ?? "–";
+
+    /// <summary>ACL entries in Windows terms, e.g. "Modify (this folder, subfolders and files)".</summary>
+    public static string Describe(IEnumerable<Ace> aces) =>
+        string.Join("; ", aces.Select(a => $"{(a.Allow ? "" : "Deny: ")}{RightsName(a.Mask)} ({Scope(a.Flags)})"));
+
+    static string RightsName(uint mask) => mask switch
+    {
+        M.Full => "Full control",
+        M.Modify => "Modify",
+        M.WriteNoDelete => "Read, execute and write, no delete",
+        M.Read => "Read and execute",
+        0x120089 => "Read",
+        0x100116 => "Write",
+        0x10000000 => "Full control (generic)",
+        0xE0010000 => "Modify (generic)",
+        0xA0000000 => "Read and execute (generic)",
+        _ => $"special rights 0x{mask:X}",
+    };
+
+    static string Scope(int flags)
+    {
+        var only = (flags & M.InheritOnly) != 0;
+        return (flags & M.OiCi) switch
+        {
+            M.OiCi => only ? "subfolders and files only" : "this folder, subfolders and files",
+            M.ContainerInherit => only ? "subfolders only" : "this folder and subfolders",
+            M.ObjectInherit => only ? "files only" : "this folder and files",
+            _ => "this folder only",
+        };
+    }
 
     /// <summary>CSS class of a right ("R|" -> "RL").</summary>
     public static string Css(string? v) => (v ?? "").Replace("|", "L");
@@ -55,7 +85,7 @@ public static class Labels
 /// <param name="Source">folder an inherited right comes from</param>
 /// <param name="Before">for pending/auto: explicit entry before</param>
 public sealed record CellInfo(string? Value, string Kind, string Tip, string? Source = null, bool Standard = true,
-    string? Before = null, string? BlockedRight = null)
+    string? Before = null, string? BlockedRight = null, bool Full = false)
 {
     /// <summary>CSS classes and text of the matrix button.</summary>
     public (string Css, string Text) Display()
@@ -65,7 +95,7 @@ public sealed record CellInfo(string? Value, string Kind, string Tip, string? So
         {
             "pending" => ((v == "" ? "empty" : v) + " pend", Value ?? "–"),
             "auto" => ((v == "" ? "empty" : v) + " auto", Value ?? "–"),
-            "direct" => (v + (Standard ? "" : " odd"), Value + (Standard ? "" : "*")),
+            "direct" => (v + (Standard ? "" : " odd"), Full ? "F" : Value + (Standard ? "" : "*")),
             "inherited" => ("inh", Value ?? ""),
             "blocked" => ("blocked", "⊘"),
             _ => ("empty", ""),
@@ -110,7 +140,7 @@ public sealed record MatrixView(
     IReadOnlySet<string> ExtraSids);
 
 public sealed record CellPanel(Principal P, Folder F, CellInfo Info, IReadOnlyList<string?> Options, string? Current,
-    IReadOnlyList<User>? Members, bool CanBreak, bool CanRestore, int MaxLevel);
+    IReadOnlyList<User>? Members, bool CanBreak, bool CanRestore, int MaxLevel, string? Entry = null);
 
 public sealed record Grant(string Name, string Right, string? Source);
 
@@ -120,7 +150,7 @@ public sealed record FolderPanel(Folder F, string Share, bool CanAdd, IReadOnlyL
 public sealed record GroupsPanel(string Gq, IReadOnlyList<Principal> Hits, IReadOnlySet<string> Shown, bool HiddenHint);
 
 public sealed record PreviewView(Plan? Plan, string? Error, IReadOnlyList<Impact> Gained, IReadOnlyList<Impact> Lost, int Cells,
-    string Phash);
+    string Phash, IReadOnlyList<HiddenLoss>? HiddenLosses = null);
 
 public sealed record DriftView(IReadOnlyList<DriftItem> Items, IReadOnlyList<Impact> Impact, BaselineInfo Info, string BaselineError,
     Desired Desired, string AuditPath, string TakenAt, string Share);

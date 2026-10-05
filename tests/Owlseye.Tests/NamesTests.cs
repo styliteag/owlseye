@@ -107,7 +107,7 @@ public class NamesTests : TestBase
         Assert.Contains(c.Matrix().Rows, r => r.Folder.Name == "Geschäftsführung"); // UTF-8 arrives unchanged
         var r = Apply(c);
         Assert.Contains("changes applied", r.Message);
-        Assert.Contains((0L, 3L, 0x1201BFL, Demo.Gsid("G-HR")), AcesOf(simDir, path));
+        Assert.Contains((0L, 3L, (long)M.Modify, Demo.Gsid("G-HR")), AcesOf(simDir, path));
         Assert.NotNull(c.FolderPage(path)); // GET /folder: 200
     }
 

@@ -306,7 +306,7 @@ public class AdProvider : IProvider
         var found = new Dictionary<string, Ace>();
         foreach (var f in folders.Values)
             foreach (var a in f.Aces)
-                if ((!a.Inherited || f.Level == 0) && !M.Hidden.Contains(a.Sid))
+                if ((!a.Inherited || f.Level == 0) && !M.IsHidden(a.Sid, a.Name))
                     found[a.Sid] = a;
         var rows = Search(found.Keys.Order(StringComparer.Ordinal).Where(s => s.StartsWith("S-1-5-21-"))
             .Select(s => $"(objectSid={LdapEscape(s)})").ToList(), ["distinguishedName", "objectSid"]);
@@ -390,7 +390,7 @@ public class AdProvider : IProvider
         foreach (var r in rows.OrderBy(r => M.Lower(r.S("sAMAccountName") ?? ""), M.Ci).Take(50))
         {
             var sid = r.Bytes("objectSid") is { } b ? SidFromBytes(b) : "";
-            if (sid != "" && !M.Hidden.Contains(sid))
+            if (sid != "" && !M.IsHidden(sid, r.S("sAMAccountName")))
             {
                 var (name, kind) = Lookup(sid);
                 o.Add(new Principal(sid, name, kind, r.S("distinguishedName") ?? ""));

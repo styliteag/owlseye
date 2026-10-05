@@ -33,7 +33,7 @@ public sealed class ReportTests : TestBase
         var hortMa = r.Matrix.Single(m => m.Folder.Path == @"Operations\Service-Staff");
         Assert.Equal("(W)", hortMa.Cells[r.Columns.ToList().FindIndex(p => p.Short == "G-Management")].Text); // inherited
         var payroll = r.Matrix.Single(m => m.Folder.Path == @"Programs\Payroll");
-        Assert.Equal("W*", payroll.Cells[r.Columns.ToList().FindIndex(p => p.Short == "G-IT")].Text); // full control: special
+        Assert.Equal("F", payroll.Cells[r.Columns.ToList().FindIndex(p => p.Short == "G-IT")].Text); // full control
         Assert.Equal(st.Findings.Count, r.Findings.Count);
         Assert.Equal(15, r.Groups.Single(g => g.Account.Short == "G-AllUsers").Members!.Count);
         Assert.Null(r.Groups.Single(g => g.Account.Short == "S-1-5-21-1-2-3-4711").Members); // unresolved SID

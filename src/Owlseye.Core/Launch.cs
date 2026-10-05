@@ -19,6 +19,7 @@ public static class Launch
         bool scanInBackground = true, string? defaultProvider = null)
     {
         var cfg = Config.Load(configFile, mode, defaultProvider);
+        M.Configure(cfg.Write, cfg.Hidden); // before any provider scans or builds ACEs
         if (cfg.Provider == "sim" && !string.IsNullOrEmpty(path)) cfg = cfg with { SimDir = path };
         IProvider provider;
         Func<string, IProvider>? openShare = null;

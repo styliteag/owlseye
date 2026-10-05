@@ -16,20 +16,20 @@ What it does for the admin, story by story with more screenshots: [docs/user-sto
 
 ## Rights model
 
-User → security group (e.g. universal) → folder ACL. A group may appear on any number of folders. Matrix columns are all accounts that occur in the share's ACLs, except SYSTEM, Administrators, Creator Owner; further groups are fetched from the directory via "＋ Group".
+User → security group (e.g. universal) → folder ACL. A group may appear on any number of folders. Matrix columns are all accounts that occur in the share's ACLs, except the hidden ones (SYSTEM, Administrators, Creator Owner, Domain Admins, Enterprise Admins and those listed under `hidden` in config.json); further groups are fetched from the directory via "＋ Group".
 
 | Cell | ACL entry | as in a typical Excel list |
 | --- | --- | --- |
 | `R` | Read, execute (`0x1200A9`), this folder + subfolders + files | `R` |
-| `W` | Read + write (`0x1201BF`, read/execute + write, without delete), this folder + subfolders + files | `W` |
+| `W` | Modify (`0x1301BF`: read, execute, write and delete), this folder + subfolders + files; with `"write": "no-delete"` in config.json read + write without delete (`0x1201BF`) | `W` |
 | `R\|` | Read this folder only (list, to reach subfolders) | `R\|` |
-| `W\|` | Read + write this folder only | `W\|` |
+| `W\|` | The same as `W`, this folder only | `W\|` |
 
-The masks live in one place (`src/Owlseye.Core/Model.cs`: `M.Read`, `M.Write`, `M.Standard`). Other entries (full control, modify, several entries of one group) show in the matrix as `*` (special entry); a click replaces them with the standard entry.
+The masks live in one place (`src/Owlseye.Core/Model.cs`: `M.Read`, `M.Write`, `M.Standard`). Full control shows as `F`; other entries (write without delete while W means Modify, several entries of one group, special rights) show as `*` (special entry), and the cell panel says in Windows terms what is there. A click replaces a special entry with the standard entry; if that removes rights the matrix does not show (delete, change permissions, take ownership), the preview lists them before anything is written.
 
 - **R| automatic:** When a group gets a right on a folder, owlseye sets `R|` on every parent folder up to the root that the group cannot otherwise enter. "Enter" means: an own (or inherited) entry there, or every member already gets in via another group (typically `G-AllUsers` with `R|` on the root). When the last right below goes away, this `R|` goes too. An `R|` set by hand stays. Missing `R|` is a finding.
 - **Inheritance** (`[-]` in the Excel list, `⛔` in the matrix): `R`/`W` pass into subfolders until one is protected; `R|`/`W|` do not. Toggle on any folder except the root. Breaking copies all inherited entries as own entries (nobody loses access), then you remove selectively. Restoring removes explicit copies of what the parent folder inherits. **Clear** resets a folder to the default like a new one: inheritance on, no own entries (deny and special entries go too), the automatically set `R|` above disappears with it.
-- **SYSTEM and Administrators** are hidden. When writing a protected folder (and the root), owlseye makes sure both have full control; if that is missing anywhere, it is a finding. Creator Owner stays unchanged.
+- **Hidden accounts:** SYSTEM, Administrators, Creator Owner, the domain's Domain Admins (RID 512) and Enterprise Admins (RID 519), whatever their name in the domain's language, and the accounts listed under `hidden` in config.json (by SID, `DOMAIN\name` or `name`) are no columns; owlseye leaves their entries alone. When writing a protected folder (and the root), owlseye makes sure both have full control; if that is missing anywhere, it is a finding. Creator Owner stays unchanged.
 - **What owlseye does not touch:** deny entries, entries of other accounts on a changed folder, ACLs with other ACE types (e.g. conditional), paths across junctions/symlinks.
 
 ## Structure
@@ -108,7 +108,10 @@ Against a real domain: as a normal admin user, **not** "Run as administrator" (o
 with `config.json` (see `config.example.json`) on the admin share, passed with `--config` or placed next to
 `owlseye.exe`. Without it, owlseye uses the domain anyway and asks for the share. `share` may be UNC or a drive letter; internally
 owlseye always works with UNC. `max_level` (default 3) is the default matrix depth (changeable in the UI);
-`scan_depth` limits how deep owlseye reads (default 20; 0 = whole tree).
+`scan_depth` limits how deep owlseye reads (default 20; 0 = whole tree). `write` says what `W` means: `"modify"`
+(default, read, write and delete, as Windows and most shares use it) or `"no-delete"` (read and write without delete).
+`hidden` lists further accounts that are not shown and not touched, e.g. a backup group with full control everywhere:
+`"hidden": ["CORP\\backup"]`.
 
 ### Installing
 
@@ -173,7 +176,8 @@ can only be raised; to restrict, use "Break inheritance".
 | `W` / `R` filled | entry on this folder |
 | `R\|` / `W\|` outlined | entry for this folder only |
 | dashed | inherited (panel shows from which folder) |
-| `*` | special entry (other mask or flags) |
+| `F` | full control |
+| `*` | other special entry (other mask or flags; the panel says what it is) |
 | `⊘` | blocked: right on the parent folder does not arrive because inheritance is broken |
 | orange outline | pending change; dashed orange: automatic `R\|` |
 | `⛔` on a folder | inheritance broken |

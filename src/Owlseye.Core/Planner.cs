@@ -5,6 +5,7 @@
 // that R| goes away too (only then; an R| set by hand stays).
 
 using System.Text.Json.Serialization;
+using Owlseye.Ui;
 
 namespace Owlseye;
 
@@ -23,6 +24,9 @@ public sealed record AclOp(
     bool Cleared = false); // default restored: inherits, no own entries
 
 public sealed record Impact(string User, string Display, string Path, string? Before, string? After);
+
+/// <summary>A right a change removes that the matrix does not show (see Planner.HiddenLosses).</summary>
+public sealed record HiddenLoss(string Name, string Path, string Before, string After, string Lost);
 
 public sealed class Plan
 {
@@ -184,8 +188,9 @@ public static class Planner
 
         foreach (var ((sid, path), v) in changes)
         {
-            if (M.Hidden.Contains(sid))
-                throw new PlanError("SYSTEM, Administrators and Creator Owner are set by owlseye, not in the matrix");
+            if (M.IsHidden(sid))
+                throw new PlanError("SYSTEM, Administrators, Creator Owner, Domain Admins and the accounts hidden in "
+                    + "config.json are not set in the matrix");
             if (!principals.ContainsKey(sid)) throw new PlanError($"Unknown account {sid}");
             if (!work.Folders.TryGetValue(path, out var f)) throw new PlanError($"Unknown folder {Py.Repr(path)}");
             if (v is not null && !M.Cells.Contains(v)) throw new PlanError($"Right must be one of {string.Join(", ", M.Cells)} or empty");
@@ -273,4 +278,40 @@ public static class Planner
     }
 
     public static bool Gained(Impact i) => M.Rank(i.After) > M.Rank(i.Before);
+
+    /// <summary>Rights a change removes although the cell still grants something afterwards, beyond what the visible
+    /// step (e.g. W -> R) explains: delete, change permissions, take ownership. Happens when a special entry (full
+    /// control, Modify while W means "no delete", …) is replaced by a standard entry. The matrix and the user impact
+    /// cannot show this, so the preview lists it.</summary>
+    public static List<HiddenLoss> HiddenLosses(Plan plan)
+    {
+        const uint shown = M.Delete | M.DeleteChild | M.WriteDac | M.WriteOwner;
+        var o = new List<HiddenLoss>();
+        foreach (var op in plan.AclOps.Where(op => !op.NewFolder))
+            foreach (var c in op.Changes.Where(c => c.After is not null))
+            {
+                var before = op.Before.Where(a => a.Sid == c.Sid && a.Allow).ToList();
+                var after = op.After.Where(a => a.Sid == c.Sid && a.Allow).ToList();
+                var visible = StdMask(c.Before) & ~StdMask(c.After);
+                var lost = Specific(before) & ~Specific(after) & shown & ~visible;
+                if (lost == 0) continue;
+                var what = new List<string>();
+                if ((lost & M.Delete) != 0) what.Add("delete");
+                if ((lost & M.DeleteChild) != 0) what.Add("delete subfolders and files");
+                if ((lost & M.WriteDac) != 0) what.Add("change permissions");
+                if ((lost & M.WriteOwner) != 0) what.Add("take ownership");
+                o.Add(new HiddenLoss(c.Name, c.Path, Labels.Describe(before), Labels.Describe(after), string.Join(", ", what)));
+            }
+        return o;
+
+        static uint StdMask(string? v) => v is null ? 0 : M.Standard[v].Mask;
+
+        static uint Specific(IEnumerable<Ace> aces) => aces.Aggregate(0u, (m, a) =>
+        {
+            var x = a.Mask;
+            if ((x & 0x10000000) != 0) x |= M.Full; // GENERIC_ALL
+            if ((x & 0x40000000) != 0) x |= 0x120116; // GENERIC_WRITE
+            return m | x;
+        });
+    }
 }

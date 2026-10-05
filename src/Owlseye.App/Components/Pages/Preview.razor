@@ -28,6 +28,10 @@ else
     }
     <div class="card"><b class="gain">@V.Gained.Count</b>rights gained</div>
     <div class="card"><b class="loss">@V.Lost.Count</b>rights lost</div>
+    @if (V.HiddenLosses is { Count: > 0 } hl)
+    {
+      <div class="card"><b class="loss">@hl.Count</b>entries lose hidden rights</div>
+    }
   </div>
   @if (plan.CreateOps.Count > 0)
   {
@@ -39,6 +43,20 @@ else
       }
     </p>
     <p class="muted small">They inherit from their parent folder. Creating a folder cannot be undone automatically.</p>
+  }
+  @if (V.HiddenLosses is { Count: > 0 } losses)
+  {
+    <div class="flash err">
+      <b>These changes remove rights the matrix does not show.</b> The entries below are special entries; the standard entry
+      that replaces them grants less, although the cell still shows a right. Check that this is intended.
+    </div>
+    <table class="list">
+      <tr><th>Folder</th><th>Group / account</th><th>now</th><th>after</th><th>removes</th></tr>
+      @foreach (var l in losses)
+      {
+        <tr><td class="mono">@Root(l.Path)</td><td>@l.Name</td><td class="small">@l.Before</td><td class="small">@l.After</td><td class="loss">@l.Lost</td></tr>
+      }
+    </table>
   }
   <h2>ACL changes</h2>
   <table class="list">
@@ -59,7 +77,7 @@ else
       foreach (var c in o.Changes)
       {
         <tr><td class="mono">@Root(o.Path)</td><td>@ShortName(c.Name)</td>
-          <td>@Labels.Short(c.Before)</td><td class="@(c.After is not null ? "gain" : "loss")">@Labels.Short(c.After)</td>
+          <td>@(c.Before is not null && Rights.IsFullControl(o.Before.Where(a => a.Sid == c.Sid && a.Allow).ToList()) ? "F" : Labels.Short(c.Before))</td><td class="@(c.After is not null ? "gain" : "loss")">@Labels.Short(c.After)</td>
           <td>@if (c.Auto) {<span class="sev low">automatic R|</span>}</td></tr>
       }
     }

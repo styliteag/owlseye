@@ -5,10 +5,12 @@
   @switch (info.Kind)
   {
     case "direct":
-      <b>Entry here:</b> @(Labels.Label(info.Value) + ".")
+      <b>Entry here:</b> @(info.Full ? "F Full control." : Labels.Label(info.Value) + ".")
       @if (!info.Standard)
       {
-        <text> The ACL entry is not one of the four standard entries (special rights or flags); choosing a right replaces it with the standard entry.</text>
+        <text> The ACL entry is </text><b>@(Model.Entry ?? "special")</b><text>, not one of the four standard entries. Choosing a right
+        replaces it with the standard entry (W = @(M.Write == M.Modify ? "Modify" : "write without delete")); the preview says
+        which rights that removes.</text>
       }
       break;
     case "inherited":

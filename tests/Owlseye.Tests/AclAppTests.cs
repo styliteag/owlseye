@@ -194,7 +194,7 @@ public sealed class AclAppTests : TestBase
         Assert.Equal("direct", page.Info.Kind); // "Entry here"
         Assert.StartsWith("Entry here", page.Info.Tip);
         Assert.Equal([null, "R|", "R", "W|", "W"], page.Options);
-        string[] labels = ["No access", "R| List", "R Read", "W| Write", "W Write"];
+        string[] labels = ["No access", "R| List", "R Read", "W| Modify", "W Modify"];
         foreach (var (label, option) in labels.Zip(page.Options))
             Assert.StartsWith(label, Labels.Label(option)); // title="{label}…" on each choice
     }
@@ -228,10 +228,22 @@ public sealed class AclAppTests : TestBase
     [Fact]
     public void NonStandardEntryIsMarkedWithAStar()
     {
-        var (_, s) = Client(new DemoProvider());
-        var hit = CellAt(s.Matrix(), G("G-IT"), @"Programs\Payroll"); // full control
+        var p = new DemoProvider();
+        var (prot, aces) = p.FolderAcl("HR");
+        p.SetFolderAcl("HR", prot, [.. aces.Select(a => a.Sid == G("G-HR") ? a with { Mask = M.WriteNoDelete } : a)]); // write, no delete
+        var (_, s) = Client(p);
+        var hit = CellAt(s.Matrix(), G("G-HR"), "HR");
         Assert.Equal(("W odd", "W*"), hit.Display()); // class="c W odd" … >W*<
         Assert.Contains("non-standard entry", hit.Tip);
+    }
+
+    [Fact]
+    public void FullControlIsShownAsF()
+    {
+        var (_, s) = Client(new DemoProvider());
+        var hit = CellAt(s.Matrix(), G("G-IT"), @"Programs\Payroll"); // full control
+        Assert.Equal(("W odd", "F"), hit.Display());
+        Assert.Equal("Entry here: Full control", hit.Tip);
     }
 
     [Fact]
@@ -281,7 +293,7 @@ public sealed class AclAppTests : TestBase
         s.SetCell(G("G-Interns"), $@"{OPS}\Sales-QA", "W");
         var r = Apply(s, "T-1");
         Assert.Contains("3 changes applied", r.Message);
-        Assert.True(HasAce(Acl(sim, $@"{OPS}\Sales-QA"), 0, 3, 0x1201BF, G("G-Interns")));
+        Assert.True(HasAce(Acl(sim, $@"{OPS}\Sales-QA"), 0, 3, M.Modify, G("G-Interns")));
         Assert.True(HasAce(Acl(sim, OPS), 0, 0, 0x1200A9, G("G-Interns")));
         var audit = s.AuditPage();
         Assert.Contains(audit.Entries, e => e.Str("reason") == "T-1"); // "T-1" in audit

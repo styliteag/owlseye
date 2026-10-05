@@ -27,6 +27,8 @@ public sealed record Config
     public string Audit { get; init; } = ""; // path to audit.jsonl; empty = local
     public string SimDir { get; init; } = ""; // provider=sim only; empty = local
     public string Baseline { get; init; } = ""; // folder for desired-<share>.json; empty = AppData (demo: memory only)
+    public string Write { get; init; } = "modify"; // what W means: "modify" (with delete) or "no-delete"
+    public IReadOnlyList<string> Hidden { get; init; } = []; // further accounts to hide like the administrators
 
     public string? BaselineDir => Baseline != "" ? Baseline : Provider == "demo" ? null : Paths.DataDir();
 
@@ -48,6 +50,8 @@ public sealed record Config
             Audit = raw.Str("audit") ?? c.Audit,
             SimDir = raw.Str("sim_dir") ?? c.SimDir,
             Baseline = raw.Str("baseline") ?? c.Baseline,
+            Write = raw.Str("write") ?? c.Write,
+            Hidden = raw["hidden"] is JsonArray h ? h.Select(n => n?.GetValue<string>() ?? "").Where(s => s != "").ToList() : c.Hidden,
         };
         return provider is not null ? c with { Provider = provider } : c;
     }
