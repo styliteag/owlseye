@@ -1,0 +1,136 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject State St
+@inject Session S
+@inject UiState Ui
+@inject NavigationManager Nav
+@inject HostInfo Host
+
+@if (!St.Ready)
+{
+  <Loading />
+}
+else
+{
+  <header class="top" inert="@Ui.Busy">
+    <a class="brand" href="/matrix"><span>◉</span> owlseye</a>
+    <nav>
+      <a href="/matrix" aria-current="@Current("matrix", "folder")">Matrix</a>
+      <a href="/users" aria-current="@Current("users")">Users</a>
+      <a href="/findings" aria-current="@Current("findings")"><text>Findings</text>@if (St.Findings.Count > 0)
+        {
+          <span class="badge">@St.Findings.Count</span>
+        }</a>
+      <a href="/drift" aria-current="@Current("drift")"><text>Desired state</text>@if (St.Drift.Count > 0 || St.BaselineError != "")
+        {
+          <span class="badge">@(St.Drift.Count > 0 ? St.Drift.Count.ToString() : "!")</span>
+        }</a>
+      <a href="/audit" aria-current="@Current("audit")">Log</a>
+      <a href="/report" aria-current="@Current("report")" title="Access rights report for audits: PDF and Excel">Report</a>
+    </nav>
+    <div class="who">
+      <a class="mono share" href="/share" title="Share: click to open another folder">📁 @St.Snap.Share</a>
+      <span title="All access runs in this context">@St.Actor</span>
+      <span class="tag @St.Provider.Name">@St.Provider.Name</span>
+      @if (Host.UnsafeFolder is not null)
+      {
+        <span class="tag unsafe" title="@Host.UnsafeFolder">⚠ elevated from an unsafe folder</span>
+      }
+      @if (St.Provider.Name == "local" && !Host.IsAdmin)
+      {
+        <button class="restart" title="Reading and writing ACLs of local folders needs administrator rights" @onclick="Restart">Restart as administrator</button>
+      }
+      <button title="Scanned @St.Snap.TakenAt" disabled="@Ui.Busy" @onclick="Rescan">Rescan</button>
+    </div>
+  </header>
+  <main class="@(PagePath.StartsWith("matrix") ? "wide" : "")" inert="@Ui.Busy">
+    @if (Ui.Flash is { } f)
+    {
+      <div class="flash @(f.Error ? "err" : "")">@f.Text</div>
+    }
+    <LoggingErrorBoundary @ref="boundary">
+      <ChildContent>@Body</ChildContent>
+      <ErrorContent Context="ex">
+        <div class="flash err">
+          <b>Something went wrong on this page:</b> @ex.Message
+          <br><span class="small muted">Details: @ErrorLog.PathOf</span>
+        </div>
+        <p><a href="/matrix">Back to the matrix</a></p>
+      </ErrorContent>
+    </LoggingErrorBoundary>
+  </main>
+}
+@if (Ui.Busy)
+{
+  <div class="busy"><ProgressBox /></div>
+}
+
+@code {
+  string PagePath => Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+
+  string? Current(params string[] prefixes) => prefixes.Any(p => PagePath.StartsWith(p)) ? "page" : null;
+
+  protected override void OnInitialized()
+  {
+    St.Changed += Repaint;
+    Ui.Changed += Repaint;
+    Nav.LocationChanged += OnLocationChanged;
+    UpdatePageTitle();
+  }
+
+  void Repaint() => InvokeAsync(StateHasChanged);
+
+  LoggingErrorBoundary? boundary;
+
+  void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+  {
+    Ui.Navigated();
+    UpdatePageTitle();
+    boundary?.Recover(); // a page that failed gets a fresh start on the next navigation
+    InvokeAsync(StateHasChanged);
+  }
+
+  async Task Rescan()
+  {
+    await Ui.RunBusy(Nav, S.Rescan);
+    Ui.ResetMatrix();
+  }
+
+  /// <summary>Like the &lt;title&gt; blocks of the web version.</summary>
+  void UpdatePageTitle()
+  {
+    var title = PagePath switch
+    {
+      "" or "matrix" => "Matrix",
+      "preview" => "Preview",
+      "users" => "Users",
+      "findings" => "Findings",
+      "drift" => "Desired state",
+      "audit" => "Log",
+      "report" => "Report",
+      "share" => "Share",
+      "folder" => FolderName(),
+      _ => "owlseye",
+    };
+    Ui.SetPageTitle(title);
+  }
+
+  string FolderName()
+  {
+    var q = new Uri(Nav.Uri).Query.TrimStart('?').Split('&').FirstOrDefault(p => p.StartsWith("path="));
+    var path = q is null ? "" : Uri.UnescapeDataString(q[5..].Replace('+', ' '));
+    return path == "" ? "(root)" : path[(path.LastIndexOf('\\') + 1)..];
+  }
+
+  void Restart()
+  {
+    if (!Host.RestartElevated()) Ui.SetFlash("Restart as administrator was cancelled.", true);
+  }
+
+  public void Dispose()
+  {
+    St.Changed -= Repaint;
+    Ui.Changed -= Repaint;
+    Nav.LocationChanged -= OnLocationChanged;
+  }
+}

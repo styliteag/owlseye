@@ -1,0 +1,63 @@
+@page "/share"
+@inherits PageBase
+@inject IJSRuntime JS
+
+<h1>Share</h1>
+@if (V is null)
+{
+  return;
+}
+<p>Open now: <span class="mono">@V.Share</span> <span class="muted small">(@V.Provider, scanned @V.TakenAt)</span></p>
+@if (!V.CanSwitch)
+{
+  <p class="muted">In @V.Provider mode the share is fixed.</p>
+}
+else
+{
+  @if (V.PendingCount > 0)
+  {
+    <div class="flash err">@V.PendingCount pending change@(V.PendingCount != 1 ? "s" : "") will be dropped when you open another share. <a href="/preview">Preview them first</a></div>
+  }
+  <form class="applyform" @onsubmit="Open">
+    <input type="text" id="sharepath" @bind="path" placeholder="E:\Share or \\fs01\Data">
+    <button type="button" @onclick="Browse">Browse…</button>
+    <button type="submit" class="primary" disabled="@Ui.Busy">Open</button>
+  </form>
+  <p class="muted small">A local folder or a UNC path. owlseye remembers the last one and opens it again at the next start.</p>
+  @if (V.Recent.Count > 0)
+  {
+    <h2>Recent</h2>
+    <table class="list">
+      @foreach (var p in V.Recent)
+      {
+        var target = p;
+        <tr><td class="mono">@p</td><td><button disabled="@Ui.Busy" @onclick="() => OpenPath(target)">Open</button></td></tr>
+      }
+    </table>
+  }
+}
+
+@code {
+  ShareView? V;
+  string path = "";
+
+  protected override void Refresh() => V = S.SharePage();
+
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+    if (firstRender) await JS.InvokeVoidAsync("owlseye.focusInput", "sharepath");
+  }
+
+  Task Open() => OpenPath(path);
+
+  Task OpenPath(string p) => Busy(() => S.OpenShare(p));
+
+  async Task Browse()
+  {
+    if (Dialogs.PickFolder() is { } p)
+    {
+      path = p;
+      await OpenPath(p);
+    }
+  }
+}

@@ -1,0 +1,48 @@
+@page "/folder"
+@inherits PageBase
+
+<p><a href="/matrix">← Matrix</a></p>
+@if (NotFound is not null || V is null)
+{
+  <p class="muted">This folder is not in the scan (any more).</p>
+  return;
+}
+@{ var f = V.F; }
+<h1 class="mono">@(V.Share + (f.Path != "" ? "\\" + f.Path : ""))</h1>
+<p class="muted">Level @f.Level@(f.Protected ? " · inheritance broken" : "") · @V.Who.Count users with access</p>
+@if (V.Findings.Count > 0)
+{
+  <h2>Findings</h2>
+  <table class="list">
+    @foreach (var x in V.Findings)
+    {
+      <tr><td><span class="sev @x.Severity">@x.Severity</span></td><td>@x.Text</td></tr>
+    }
+  </table>
+}
+<h2>Who has access?</h2>
+<table class="list">
+  <tr><th>User</th><th>Right</th></tr>
+  @foreach (var (u, r) in V.Who)
+  {
+    <tr><td><a href="/users?u=@Enc(u.Dn)">@u.Display</a> <span class="muted">@u.Sam</span></td><td><span class="c @Labels.Css(r)">@r</span></td></tr>
+  }
+</table>
+<h2>ACL (entries of this folder)</h2>
+<table class="list">
+  <tr><th>Account</th><th>Type</th><th>Entry</th><th>Mask</th><th>Flags</th></tr>
+  @foreach (var e in V.Entries)
+  {
+    <tr><td class="mono">@e.Ace.Name</td><td>@e.Ace.Kind</td>
+      <td>@if (!e.Ace.Allow) {<span class="loss">Deny</span>} else {@Labels.Label(e.Value)}</td>
+      <td class="mono">0x@(e.Ace.Mask.ToString("X6"))</td><td class="mono">0x@(e.Ace.Flags.ToString("X2"))</td></tr>
+  }
+</table>
+
+@code {
+  [SupplyParameterFromQuery] public string? Path { get; set; }
+
+  FolderView? V;
+
+  protected override void Refresh() => V = S.FolderPage(Path ?? "");
+}

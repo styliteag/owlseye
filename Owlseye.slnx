@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Owlseye.App/Owlseye.App.csproj" />
+    <Project Path="src/Owlseye.Core/Owlseye.Core.csproj" />
+    <Project Path="src/Owlseye.Windows/Owlseye.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Owlseye.Tests/Owlseye.Tests.csproj" />
+    <Project Path="tests/Owlseye.Windows.Tests/Owlseye.Windows.Tests.csproj" />
+  </Folder>
+</Solution>

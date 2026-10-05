@@ -1,0 +1,35 @@
+name: release
+
+# A tag v1.2.3 (or v1.2.3-rc1, published as a pre-release) tests, builds and publishes a GitHub release with
+# owlseye-1.2.3-win-x64.zip (the publish folder) and SHA256SUMS.txt.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write # create the release and upload its files
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Tests, exe and zip
+        shell: pwsh
+        run: ./build-windows.ps1 -Version ($env:GITHUB_REF_NAME.Substring(1))
+      # No UI smoke test here (see ci.yml); it runs locally before tagging.
+      - name: GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $extra = @()
+          if ($tag.Contains('-')) { $extra += '--prerelease' }
+          gh release create $tag (Get-ChildItem dist).FullName --verify-tag --generate-notes --title "OwlsEye $tag" @extra
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }

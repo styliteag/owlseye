@@ -1,0 +1,236 @@
+@page "/report"
+@inherits PageBase
+@using Owlseye.Reports
+@inject WebViewHost WebView
+
+<div class="report-actions">
+  <h1>Access rights report</h1>
+  <p class="muted">Who may read or write where on this share, as evidence for audits (data protection, ISO 27001) and in place
+  of a hand-kept Excel list. The report shows the share as scanned; <b>Save as PDF</b> prints exactly this page,
+  <b>Save as Excel</b> adds one row per user and folder to filter.</p>
+  <div class="applyform">
+    <button class="primary" disabled="@(R is null || working)" @onclick="SavePdf">Save as PDF…</button>
+    <button disabled="@(R is null || working)" @onclick="SaveXlsx">Save as Excel…</button>
+    @if (working)
+    {
+      <span class="muted">Saving…</span>
+    }
+  </div>
+  @if (saved is not null)
+  {
+    <p class="saved">Saved <span class="mono">@saved</span> ·
+      <button class="linklike" @onclick="() => Dialogs.Open(saved)">Open</button> ·
+      <button class="linklike" @onclick="() => Dialogs.ShowInFolder(saved)">Show in folder</button></p>
+  }
+  @if (R is { PendingCount: > 0 })
+  {
+    <div class="flash err">@R.PendingCount pending change@(R.PendingCount != 1 ? "s are" : " is") not part of the report: it shows the share as it is. <a href="/preview">Apply them first</a></div>
+  }
+</div>
+
+@if (R is null)
+{
+  <p class="muted">Building the report…</p>
+  return;
+}
+<article class="report">
+  <section class="first">
+    <h1>Access rights report</h1>
+    <p class="share mono">@R.Share</p>
+    <div class="meta">
+      <span>Created</span><span>@R.CreatedAt by @R.CreatedBy</span>
+      <span>Scanned</span><span>@R.ScannedAt (@R.Provider)</span>
+      <span>Folders</span><span>@R.Matrix.Count shown (matrix depth @R.MaxLevel, deeper folders only where they have entries of their own) of @R.FoldersScanned scanned</span>
+    </div>
+    <div class="cards">
+      <div class="card"><b>@R.Matrix.Count</b>folders</div>
+      <div class="card"><b>@R.Columns.Count</b>accounts with rights</div>
+      <div class="card"><b>@R.UsersWithAccess</b>users with access</div>
+      <div class="card"><b class="@(R.Findings.Any(f => f.Severity == "high") ? "loss" : "")">@R.Findings.Count</b>findings</div>
+      <div class="card"><b>@R.Changes.Count</b>changes in @R.ChangeDays days</div>
+    </div>
+    <p class="small muted">Rights: <b>W</b> read and write, <b>R</b> read (this folder and everything below), <b>W|</b> / <b>R|</b>
+      this folder only; <span class="inh">(W)</span> inherited from a parent folder; <b>*</b> a special entry (not one of the four
+      standard entries); ⛔ inheritance broken. SYSTEM, Administrators and Creator Owner are not listed.</p>
+  </section>
+
+  <section>
+    <h2>1. Rights matrix</h2>
+    @for (var start = 0; start < Math.Max(1, R.Columns.Count); start += Chunk)
+    {
+      var from = start;
+      var cols = R.Columns.Skip(from).Take(Chunk).ToList();
+      @if (R.Columns.Count > Chunk)
+      {
+        <p class="small muted">Accounts @(from + 1)–@(from + cols.Count) of @R.Columns.Count</p>
+      }
+      <div class="rm-wrap"><table class="rm">
+        <thead>
+          <tr>
+            <th class="corner">Folder</th>
+            @foreach (var p in cols)
+            {
+              <th class="acc" title="@p.Name"><span>@p.Short</span></th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @foreach (var row in R.Matrix)
+          {
+            var f = row.Folder;
+            <tr class="@(f.Level == 1 ? "lvl1" : "")">
+              <td class="folder" style="--lvl: @f.Level">@(f.Level > 0 && f.Protected ? "⛔ " : "")@f.Name</td>
+              @for (var i = 0; i < cols.Count; i++)
+              {
+                var c = row.Cells[from + i];
+                <td class="v @(c.Value is null ? "" : c.Own ? "own" : "inh")">@c.Text</td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table></div>
+    }
+  </section>
+
+  <section>
+    <h2>2. Groups and members</h2>
+    <table class="list small">
+      <thead><tr><th>Account</th><th>Kind</th><th>Users</th><th>Members</th></tr></thead>
+      <tbody>
+        @foreach (var g in R.Groups)
+        {
+          <tr>
+            <td class="mono">@g.Account.Name</td><td>@g.Account.Kind</td>
+            <td>@(g.Members?.Count.ToString() ?? "?")</td>
+            <td>@(g.Members is null ? "not known (built-in or not in the directory)" : g.Members.Count == 0 ? "no members" : string.Join(", ", g.Members.Select(u => u.Display + (u.Enabled ? "" : " (disabled)"))))</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. Access per user</h2>
+    <table class="list small">
+      <thead><tr><th>User</th><th>Folders and rights</th></tr></thead>
+      <tbody>
+        @foreach (var u in R.PerUser)
+        {
+          <tr>
+            <td><b>@u.User.Display</b> <span class="muted">@u.User.Sam@(u.User.Enabled ? "" : ", disabled")</span></td>
+            <td>@if (u.Folders.Count == 0) {<span class="muted">no access</span>} else {@string.Join(" · ", u.Folders.Select(x => $"{(x.Folder != "" ? x.Folder : "(root)")} {x.Right}"))}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>4. Findings</h2>
+    @if (R.Findings.Count == 0)
+    {
+      <p class="muted">No findings.</p>
+    }
+    else
+    {
+      <table class="list small">
+        <thead><tr><th>Severity</th><th>Folder</th><th>Finding</th></tr></thead>
+        <tbody>
+          @foreach (var x in R.Findings)
+          {
+            <tr><td><span class="sev @x.Severity">@x.Severity</span></td><td class="mono">@(x.Path != "" ? x.Path : "(root)")</td><td>@x.Text</td></tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+
+  <section>
+    <h2>5. Changes in the last @R.ChangeDays days</h2>
+    @if (R.Changes.Count == 0)
+    {
+      <p class="muted">No changes made with owlseye in this period.</p>
+    }
+    else
+    {
+      <table class="list small">
+        <thead><tr><th>Time (UTC)</th><th>Who</th><th>Reason</th><th>Change</th><th>Folder</th><th>Account</th><th>Before</th><th>After</th></tr></thead>
+        <tbody>
+          @foreach (var c in R.Changes)
+          {
+            <tr><td class="mono">@c.Time</td><td>@c.Actor</td><td>@c.Reason</td><td>@c.What</td><td class="mono">@c.Folder</td><td>@c.Account</td><td>@c.Before</td><td>@c.After</td></tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+</article>
+
+@code {
+  const int Chunk = 28; // accounts per matrix block: fits A4 landscape
+
+  RightsReport? R;
+  bool working;
+  string? saved;
+  int version;
+
+  protected override void Refresh()
+  {
+    var v = ++version;
+    _ = Task.Run(() => ReportBuilder.Build(St)).ContinueWith(t => InvokeAsync(() =>
+    {
+      if (v != version) return; // a newer refresh is on its way
+      if (t.IsFaulted)
+      {
+        Ui.SetFlash($"The report could not be built: {t.Exception!.GetBaseException().Message}", true);
+        return;
+      }
+      R = t.Result;
+      StateHasChanged();
+    }));
+  }
+
+  async Task SavePdf()
+  {
+    var path = Dialogs.SaveFile("Save the report as PDF", "PDF document (*.pdf)|*.pdf", R!.FileStem + ".pdf");
+    if (path is null) return;
+    working = true;
+    try
+    {
+      var ok = await WebView.PrintToPdf(path, $"owlseye access rights report · {R.Share}");
+      saved = ok ? path : null;
+      if (!ok) Ui.SetFlash("The PDF could not be written.", true);
+    }
+    catch (Exception e)
+    {
+      ErrorLog.Write("report pdf", e);
+      Ui.SetFlash($"The PDF could not be written: {e.Message}", true);
+    }
+    finally
+    {
+      working = false;
+    }
+  }
+
+  async Task SaveXlsx()
+  {
+    var path = Dialogs.SaveFile("Save the report as Excel workbook", "Excel workbook (*.xlsx)|*.xlsx", R!.FileStem + ".xlsx");
+    if (path is null) return;
+    working = true;
+    var report = R;
+    try
+    {
+      await Task.Run(() => ReportBuilder.WriteXlsx(report, path));
+      saved = path;
+    }
+    catch (Exception e)
+    {
+      ErrorLog.Write("report xlsx", e);
+      Ui.SetFlash($"The workbook could not be written: {e.Message}", true);
+    }
+    finally
+    {
+      working = false;
+    }
+  }
+}

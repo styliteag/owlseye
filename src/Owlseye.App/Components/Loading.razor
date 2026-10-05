@@ -1,0 +1,77 @@
+@implements IDisposable
+@inject State St
+@inject Session S
+@inject UiState Ui
+@inject Dialogs Dialogs
+@inject HostInfo Host
+
+@* Shown for every page until the first scan is done; the layout switches to the page then. *@
+<main class="loading">
+  <h1 class="brand"><span>◉</span> owlseye</h1>
+  <p class="mono">@St.Provider.Share</p>
+  @if (Ui.Flash is { } f)
+  {
+    <div class="flash @(f.Error ? "err" : "")">@f.Text</div>
+  }
+  @if (St.LoadError != "" && !St.Loading)
+  {
+    <div class="flash err">Cannot read the share: @St.LoadError</div>
+    <button class="primary" @onclick="Retry">Try again</button>
+    @if (St.Provider.Name == "local" && !Host.IsAdmin)
+    {
+      <button class="restart" @onclick="Restart">Restart as administrator</button>
+    }
+    @if (St.OpenShare is not null)
+    {
+      <h2>Or open another folder</h2>
+      <form class="applyform" @onsubmit="Open">
+        <input type="text" @bind="path" placeholder="E:\Share or \\fs01\Data">
+        <button type="button" @onclick="Browse">Browse…</button>
+        <button type="submit">Open</button>
+      </form>
+      <p class="muted">Just looking around? <button class="link" @onclick="Demo">Open the demo data</button> (restarts owlseye)</p>
+    }
+  }
+  else
+  {
+    <ProgressBox />
+  }
+</main>
+
+@code {
+  string path = "";
+
+  protected override void OnInitialized() => St.Changed += Repaint;
+
+  void Repaint() => InvokeAsync(StateHasChanged);
+
+  void Retry()
+  {
+    Ui.SetFlash(null);
+    St.LoadInBackground();
+  }
+
+  void Restart()
+  {
+    if (!Host.RestartElevated()) Ui.SetFlash("Restart as administrator was cancelled.", true);
+  }
+
+  void Demo() => Host.RestartWith("--demo");
+
+  void Browse()
+  {
+    if (Dialogs.PickFolder() is { } p)
+    {
+      path = p;
+      Open();
+    }
+  }
+
+  void Open()
+  {
+    var o = S.OpenShare(path);
+    Ui.SetFlash(o.Message, o.Error);
+  }
+
+  public void Dispose() => St.Changed -= Repaint;
+}

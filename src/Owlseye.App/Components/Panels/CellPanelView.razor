@@ -1,0 +1,92 @@
+@{ var p = Model.P; var f = Model.F; var info = Model.Info; }
+<h3>@p.Short</h3>
+<p class="mono small">@p.Name · @p.Kind<br>@(f.Path != "" ? f.Path : "(root)")</p>
+<p class="state @info.Kind">
+  @switch (info.Kind)
+  {
+    case "direct":
+      <b>Entry here:</b> @(Labels.Label(info.Value) + ".")
+      @if (!info.Standard)
+      {
+        <text> The ACL entry is not one of the four standard entries (special rights or flags); choosing a right replaces it with the standard entry.</text>
+      }
+      break;
+    case "inherited":
+      <b>Inherited from</b> <span class="mono">@(info.Source is { Length: > 0 } s ? s : "(root)")</span>@(": " + Labels.Label(info.Value) + ".")
+      @if (Model.Current is not null)
+      {
+        <text> Also an entry here: @Labels.Label(Model.Current).</text>
+      }
+      break;
+    case "blocked":
+      <b>Blocked.</b> @Labels.Label(info.BlockedRight) <text> on </text><span class="mono">@(info.Source is { Length: > 0 } b ? b : "(root)")</span><text> does not reach this folder because inheritance is broken here.</text>
+      break;
+    case "pending":
+      <b>Pending:</b> @(info.Tip.Replace("Pending: ", "") + ". Preview to apply it.")
+      break;
+    case "auto":
+      <b>Automatic:</b> @(info.Tip + ". owlseye keeps R| on the parent folders so the group can reach the folders below where it has rights.")
+      break;
+    default:
+      <text>No access.</text>
+      break;
+  }
+</p>
+@if (Model.Options.Count > 0)
+{
+  <div class="choices">
+    @foreach (var r in Model.Options)
+    {
+      var right = r;
+      <button class="@ChoiceClass(r)" title="@Labels.Label(r)"
+              @onclick="() => OnSetRight.InvokeAsync(right ?? string.Empty)">@(r ?? "–")</button>
+    }
+  </div>
+  <p class="muted small">R and W go down into subfolders (unless inheritance is broken there); R| and W| apply to this folder only. Giving a right here adds R| on the parent folders automatically.</p>
+}
+else if (f.OtherAces)
+{
+  <p class="muted small">This folder's ACL cannot be read completely or has entries of other types; owlseye does not rewrite it.</p>
+}
+@if (f.Level > Model.MaxLevel)
+{
+  <p class="muted small">Below the matrix depth (@Model.MaxLevel). Rights here are a deviation; usually you remove the entry or restore inheritance.</p>
+}
+@if (info.Kind == "blocked" && Model.CanRestore)
+{
+  <button @onclick="() => OnInheritance.InvokeAsync(true)">Restore inheritance on @f.Name</button>
+}
+@if (info.Kind == "inherited")
+{
+  <p class="muted small">An inherited right can only be raised here. To restrict it on this folder, break inheritance@(Model.CanBreak ? "" : " (not possible on this folder)").</p>
+  @if (Model.CanBreak)
+  {
+    <button @onclick="() => OnInheritance.InvokeAsync(false)">Break inheritance on @f.Name</button>
+  }
+}
+<h4>Members</h4>
+@if (Model.Members is null)
+{
+  <p class="muted small">@(p.Kind == "unknown" ? "Unresolved account." : "Members are not known to owlseye (built-in or not found in the directory).")</p>
+}
+else if (Model.Members.Count > 0)
+{
+  <p class="small">@string.Join(", ", Model.Members.Take(30).Select(u => u.Display))@(Model.Members.Count > 30 ? $" … and {Model.Members.Count - 30} more" : "")</p>
+}
+else
+{
+  <p class="muted small">No members.</p>
+}
+<p class="small"><a href="/folder?path=@Uri.EscapeDataString(f.Path)">Who has access to @f.Name?</a></p>
+
+@code {
+  [Parameter, EditorRequired] public CellPanel Model { get; set; } = null!;
+
+  string ChoiceClass(string? r) => "choice " + (r is null ? "none" : Labels.Css(r)) + (r == Model.Current ? " on" : "");
+
+  /// <summary>"" = no entry, else R| R W| W.</summary>
+  [Parameter] public EventCallback<string> OnSetRight { get; set; }
+
+  /// <summary>true = restore inheritance, false = break it.</summary>
+  [Parameter] public EventCallback<bool> OnInheritance { get; set; }
+}

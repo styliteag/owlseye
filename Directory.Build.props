@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Version>0.9.9</Version>
+    <Company>Stylite AG</Company>
+    <Product>OwlsEye - Orbit Access Matrix</Product>
+    <Copyright>Copyright (c) 2026 Stylite AG. GNU AGPL v3.0, see LICENSE.</Copyright>
+  </PropertyGroup>
+</Project>

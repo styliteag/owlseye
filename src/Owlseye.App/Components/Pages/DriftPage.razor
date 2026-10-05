@@ -1,0 +1,148 @@
+@page "/drift"
+@inherits PageBase
+
+<h1>Changes made outside owlseye</h1>
+<p class="muted">Compares the ACL entries and the inheritance of all scanned folders with the desired state that owlseye set last.
+<b>Restore</b> puts the desired state back (recreates missing folders, resets entries and inheritance) through preview and apply;
+<b>Keep</b> makes the current state the new desired state.</p>
+@if (V is null)
+{
+  return;
+}
+<div class="filebox">
+  <div>
+    <b>Desired state file</b>
+    @if (V.Info.Path != "")
+    {
+      <span class="mono">@V.Info.Path</span>
+    }
+    else
+    {
+      <span class="muted">in memory only (demo)</span>
+    }
+    <br><span class="muted small">
+      @if (!V.Info.Exists)
+      {
+        <text>not saved yet</text>
+      }
+      else if (V.Info.Legacy)
+      {
+        <text>from the earlier group model; replaced on the next start</text>
+      }
+      else if (V.Info.Updated != "")
+      {
+        <text>last written @V.Info.Updated by @V.Info.By</text>
+      }
+      else
+      {
+        <text>cannot be read</text>
+      }
+      @if (V.BaselineError == "")
+      {
+        <text> · @V.Desired.Cells.Count entries, @V.Desired.Protected.Count folders with broken inheritance</text>
+      }
+      · log <span class="mono">@V.AuditPath</span></span>
+  </div>
+  <form @onsubmit="Reset">
+    <input type="text" @bind="resetReason" placeholder="Reason (log)">
+    <button type="submit" disabled="@Ui.Busy">Delete desired state…</button>
+  </form>
+</div>
+@if (V.BaselineError != "")
+{
+  <div class="flash err">The desired state file cannot be read: <span class="mono">@V.BaselineError</span>. Comparison is off until the file is fixed or removed; owlseye will not overwrite it.</div>
+}
+else if (V.Items.Count > 0)
+{
+  <table class="list">
+    <tr><th><input type="checkbox" checked="@(selected.Count == V.Items.Count)" @onchange="ToggleAll"></th>
+        <th>Change</th><th>Folder</th><th>Group / account</th><th>desired</th><th>current</th></tr>
+    @foreach (var d in V.Items)
+    {
+      var key = d.Key;
+      <tr>
+        <td><input type="checkbox" checked="@selected.Contains(key)" @onchange="e => Toggle(key, e)"></td>
+        @if (d.Change == "folder_gone")
+        {
+          <td class="loss">folder missing</td><td class="mono">@d.Path</td><td colspan="3" class="muted">deleted or renamed · restore recreates it (empty) with its desired entries@(V.Desired.Protected.Contains(d.Path) ? " and broken inheritance" : ""); keep forgets it</td>
+        }
+        else if (d.Change is "broken" or "restored")
+        {
+          <td class="@(d.Change == "broken" ? "loss" : "gain")">inheritance @d.Change</td><td class="mono">@d.Path</td>
+          <td colspan="3" class="muted">restore @(d.Change == "broken" ? "turns inheritance back on" : "breaks inheritance again")</td>
+        }
+        else
+        {
+          <td class="@(d.Change == "added" ? "gain" : d.Change == "removed" ? "loss" : "")">entry @d.Change</td>
+          <td class="mono">@Root(d.Path)</td><td>@d.Name[(d.Name.LastIndexOf('\\') + 1)..]</td><td>@Labels.Short(d.Before)</td><td>@Labels.Short(d.After)</td>
+        }
+      </tr>
+    }
+  </table>
+  <div class="applyform">
+    <button class="primary" title="Recreate missing folders and reset entries and inheritance to the desired state (preview first)" @onclick="Revert">Restore desired state…</button>
+    <input type="text" @bind="keepReason" placeholder="Reason for keeping (goes into the log)">
+    <button title="Make the current state the new desired state" disabled="@Ui.Busy" @onclick="Accept">Keep current state</button>
+  </div>
+  <h2>Effect on users (desired → current)</h2>
+  @if (V.Impact.Count > 0)
+  {
+    <table class="list">
+      <tr><th>Folder</th><th>User</th><th>desired</th><th>current</th></tr>
+      @foreach (var i in V.Impact)
+      {
+        <tr><td class="mono">@Root(i.Path)</td><td>@i.Display <span class="muted">@i.User</span></td>
+          <td>@Labels.Short(i.Before)</td><td>@Labels.Short(i.After)</td></tr>
+      }
+    </table>
+  }
+  else
+  {
+    <p class="muted">No effect on users.</p>
+  }
+}
+else
+{
+  <p class="muted">No differences: the ACLs match the desired state (scanned @V.TakenAt).</p>
+}
+
+@code {
+  DriftView? V;
+  HashSet<string> selected = [];
+  HashSet<string> known = [];
+  string resetReason = "", keepReason = "";
+
+  protected override void Refresh()
+  {
+    V = S.DriftPage();
+    var keys = V.Items.Select(d => d.Key).ToHashSet();
+    // new items start checked (like the form in the web version); unchecked ones stay unchecked
+    selected = keys.Where(k => selected.Contains(k) || !known.Contains(k)).ToHashSet();
+    known = keys;
+  }
+
+  void Toggle(string key, ChangeEventArgs e)
+  {
+    if (e.Value is true) selected.Add(key);
+    else selected.Remove(key);
+  }
+
+  void ToggleAll(ChangeEventArgs e) => selected = e.Value is true ? V!.Items.Select(d => d.Key).ToHashSet() : [];
+
+  Task Reset()
+  {
+    var ask = $"Delete the desired state for {St.Snap.Share}?\n\nThe current ACLs become the new desired state; outside changes made so far are no longer reported. Nothing on the file server changes.";
+    if (!Dialogs.Confirm(ask)) return Task.CompletedTask;
+    var r = resetReason;
+    return Busy(() => S.DriftReset(r));
+  }
+
+  Task Accept()
+  {
+    var keys = selected.ToList();
+    var r = keepReason;
+    return Busy(() => S.DriftAccept(keys, r));
+  }
+
+  void Revert() => Go(S.DriftRevert(selected.ToList()));
+}

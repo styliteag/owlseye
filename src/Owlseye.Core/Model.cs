@@ -1,0 +1,206 @@
+// Data model: a snapshot of folders (with ACEs), the accounts in these ACLs and their members.
+//
+// Rights model (as in a typical Excel list of folder rights): groups appear directly in the folder ACLs.
+// A matrix cell is the explicit entry of an account on a folder:
+//
+//   R   Read, this folder + subfolders + files
+//   W   Read + write, this folder + subfolders + files
+//   R|  Read this folder only (list, to reach subfolders)
+//   W|  Read + write this folder only
+
+using System.Globalization;
+using System.Text;
+
+namespace Owlseye;
+
+public static class M
+{
+    public static readonly string[] Cells = ["R|", "R", "W|", "W"];
+
+    public static double Rank(string? v) => v switch
+    {
+        null => 0,
+        "R|" => 0.5,
+        "W|" => 0.75,
+        "R" => 1,
+        "W" => 2,
+        _ => throw new ArgumentException($"Unknown right {v}"),
+    };
+
+    public const int ObjectInherit = 0x1, ContainerInherit = 0x2, InheritOnly = 0x8, InheritedAce = 0x10;
+    public const int OiCi = ObjectInherit | ContainerInherit, ThisFolder = 0x0;
+    public const uint Read = 0x1200A9; // Read, execute
+    public const uint Write = Read | 0x116; // + write (create files, append data, attributes); no delete, unlike "Modify"
+    public const uint Full = 0x1F01FF;
+
+    public static readonly IReadOnlyDictionary<string, (uint Mask, int Flags)> Standard = new Dictionary<string, (uint, int)>
+    {
+        ["R|"] = (Read, ThisFolder),
+        ["R"] = (Read, OiCi),
+        ["W|"] = (Write, ThisFolder),
+        ["W"] = (Write, OiCi),
+    };
+
+    public const string System = "S-1-5-18", Admins = "S-1-5-32-544", CreatorOwner = "S-1-3-0", OwnerRights = "S-1-3-4";
+
+    /// <summary>Not in the matrix. owlseye sets SYSTEM and Administrators itself on protected folders (full control).</summary>
+    public static readonly IReadOnlySet<string> Hidden = new HashSet<string> { System, Admins, CreatorOwner, OwnerRights };
+
+    /// <summary>Groups every logged-in user belongs to (Everyone, Authenticated Users, BUILTIN\Users).</summary>
+    public static readonly IReadOnlyList<string> Everyone = ["S-1-1-0", "S-1-5-11", "S-1-5-32-545"];
+
+    public static bool SameShare(string a, string b) =>
+        a.TrimEnd('\\').ToLowerInvariant() == b.TrimEnd('\\').ToLowerInvariant();
+
+    const string BadNameChars = "\\/:*?\"<>|"; // what Windows does not allow in folder names
+
+    /// <summary>Folder names that Win32 rewrites or that can point to something else.</summary>
+    public static bool BadComponent(string p) =>
+        p is "" or "." or ".." || p != p.TrimEnd('.', ' ') || p.Any(c => BadNameChars.Contains(c) || c < 32);
+
+    static readonly string[] Digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "¹", "²", "³"];
+
+    static readonly HashSet<string> Reserved =
+    [
+        "con", "prn", "aux", "nul", "conin$", "conout$",
+        .. Digits.Select(d => "com" + d), .. Digits.Select(d => "lpt" + d),
+    ];
+
+    /// <summary>Invisible, direction-changing or odd-space characters: a folder that looks like another one.
+    /// Users can create such folders; the admin must not be tricked into granting rights on the lookalike.</summary>
+    public static bool SuspiciousName(string name) =>
+        name.EnumerateRunes().Any(OddChar) || !IsNfc(name) || MixedScripts(name);
+
+    /// <summary>A name with an unpaired surrogate (possible on NTFS) cannot be normalized at all: that is suspicious too,
+    /// and must not make the scan fail (string.IsNormalized throws on it).</summary>
+    static bool IsNfc(string name)
+    {
+        try
+        {
+            return name.IsNormalized(NormalizationForm.FormC);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    static bool OddChar(Rune c)
+    {
+        var cat = Rune.GetUnicodeCategory(c);
+        return cat is UnicodeCategory.Format or UnicodeCategory.PrivateUse or UnicodeCategory.OtherNotAssigned
+            || (cat == UnicodeCategory.SpaceSeparator && c.Value != ' ');
+    }
+
+    /// <summary>Latin letters next to Cyrillic or Greek ones: 'Dаten' with a Cyrillic а.</summary>
+    static bool MixedScripts(string name)
+    {
+        var used = new HashSet<string>();
+        foreach (var c in name.EnumerateRunes())
+        {
+            if (!Rune.IsLetter(c)) continue;
+            var v = c.Value;
+            if (v is >= 0x41 and < 0x250) used.Add("latin");
+            else if (v is >= 0x370 and < 0x400) used.Add("greek");
+            else if (v is >= 0x400 and < 0x530) used.Add("cyrillic");
+        }
+        return used.Count > 1;
+    }
+
+    /// <summary>Additionally for new folders: no reserved device names (CON, NUL, … also with extension, "CON .txt").</summary>
+    public static bool BadFolderName(string name) =>
+        BadComponent(name) || Reserved.Contains(name.Split('.')[0].TrimEnd(' ').ToLowerInvariant());
+
+    public static string? Stronger(string? a, string? b) => Rank(a) >= Rank(b) ? a : b;
+
+    /// <summary>Parent folders up to the root, nearest first: "A\B\C" -> ["A\B", "A", ""].</summary>
+    public static List<string> Ancestors(string path)
+    {
+        var o = new List<string>();
+        while (path != "")
+        {
+            var i = path.LastIndexOf('\\');
+            path = i >= 0 ? path[..i] : "";
+            o.Add(path);
+        }
+        return o;
+    }
+
+    public static int LevelOf(string path) => path == "" ? 0 : path.Count(c => c == '\\') + 1;
+
+    public static string Lower(string s) => s.ToLowerInvariant();
+
+    /// <summary>Ordinal comparison of lowercased strings, like Python's sorted(key=str.lower).</summary>
+    public static readonly StringComparer Ci = StringComparer.Ordinal;
+
+    /// <summary>Tree order: compares the lowercased path components like Python lists.</summary>
+    public static int TreeCompare(string a, string b)
+    {
+        var pa = a.Split('\\');
+        var pb = b.Split('\\');
+        for (var i = 0; i < Math.Min(pa.Length, pb.Length); i++)
+        {
+            var c = string.CompareOrdinal(Lower(pa[i]), Lower(pb[i]));
+            if (c != 0) return c;
+        }
+        return pa.Length.CompareTo(pb.Length);
+    }
+
+    static readonly System.Text.RegularExpressions.Regex SidSyntax = new(@"^S-\d+(-\d+)*$");
+
+    /// <summary>Looks like a SID (S-1-5-21-…). For SIDs that come from files: they are resolved before use anyway.</summary>
+    public static bool IsSid(string s) => SidSyntax.IsMatch(s);
+
+    /// <summary>Short display of a right: None -> "–".</summary>
+    public static string Short(string? v) => v ?? "–";
+}
+
+public sealed record Ace(string Sid, string Name, string Kind, uint Mask, bool Allow = true, bool Inherited = false, int Flags = 0);
+
+/// <param name="Id">identity on disk (volume and file id) where the file system tells it, "" otherwise: owlseye writes
+/// only if the folder at this path is still the one it scanned</param>
+public sealed record Folder(string Path, int Level, bool Protected = false, IReadOnlyList<Ace>? Aces = null,
+    bool OtherAces = false, string Error = "", string Id = "")
+{
+    /// <summary>Explicit and inherited, as read.</summary>
+    public IReadOnlyList<Ace> Aces { get; init; } = Aces ?? [];
+
+    public string Name => Path == "" ? "(root)" : Path[(Path.LastIndexOf('\\') + 1)..];
+
+    public string? Parent => Path == "" ? null : Path.Contains('\\') ? Path[..Path.LastIndexOf('\\')] : "";
+
+    public IReadOnlyList<Ace> Explicit => Aces.Where(a => !a.Inherited).ToList();
+}
+
+/// <summary>An account that appears in an ACL: one column of the matrix.</summary>
+public sealed record Principal(string Sid, string Name, string Kind, string Dn = "")
+{
+    public string Short => Name[(Name.LastIndexOf('\\') + 1)..];
+}
+
+public sealed record Group(string Dn, string Sam, HashSet<string> Members, string Sid = "");
+
+public sealed record User(string Dn, string Sam, string Display, bool Enabled = true, string Sid = "");
+
+public sealed record Snapshot(
+    string Share,
+    Dictionary<string, Folder> Folders,
+    Dictionary<string, Principal> Principals, // key = SID; all accounts in the ACLs except Hidden
+    Dictionary<string, Group> Groups, // key = DN
+    Dictionary<string, User> Users, // key = DN
+    string TakenAt = "")
+{
+    public string NameOf(string dn)
+    {
+        if (Groups.TryGetValue(dn, out var g)) return g.Sam;
+        if (Users.TryGetValue(dn, out var u)) return u.Sam;
+        var first = dn.Split(',', 2)[0];
+        return first.StartsWith("CN=") ? first[3..] : first;
+    }
+}
+
+public static class Clock
+{
+    /// <summary>Like Python's datetime.now(UTC).isoformat(timespec="seconds").</summary>
+    public static string Now() => DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture) + "+00:00";
+}

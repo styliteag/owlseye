@@ -1,0 +1,81 @@
+@* One folder row of the matrix. Redrawn only when its signature changes: on a large share most rows stay as they are
+   after a click, and diffing thousands of unchanged buttons would make every change slow. *@
+@{ var f = Row.Folder; var isTop = f.Level == 1; }
+<tr class="@RowClass()" data-top="@Row.Top" title="@RowTitle()">
+  <th class="@FolderClass()" style="--lvl: @f.Level">
+    @if (isTop && Row.HasChildren)
+    {
+      <button type="button" class="caret" title="Collapse or expand" @onclick="() => OnToggle.InvokeAsync(Row.Top)">▾</button>
+    }
+    else
+    {
+      <span class="caret-space"></span>
+    }
+    <button type="button" class="@(Row.Protected ? "inh-icon off" : "inh-icon")" title="@InhTitle()"
+            @onclick="() => OnFolder.InvokeAsync(f.Path)">@(Row.Protected ? "⛔" : "↳")</button>
+    <button type="button" class="fname" title="@(f.Path != "" ? f.Path : Share)" @onclick="() => OnFolder.InvokeAsync(f.Path)">@((Row.IsNew ? "＋ " : "") + f.Name)</button>
+    @if (Row.Flagged)
+    {
+      <a class="flag" href="/folder?path=@Uri.EscapeDataString(f.Path)" title="Findings on this folder">⚠</a>
+    }
+  </th>
+  @for (var i = 0; i < Columns.Count; i++)
+  {
+    var p = Columns[i];
+    var ci = Row.Cells[i];
+    var (css, txt) = ci.Display();
+    <td><button type="button" class="c @css" data-sid="@p.Sid" data-path="@f.Path" title="@(p.Short + " · " + (f.Path != "" ? f.Path : "(root)") + ": " + ci.Tip)">@txt</button></td>
+  }
+</tr>
+
+@code {
+  [Parameter, EditorRequired] public MatrixRow Row { get; set; } = null!;
+  [Parameter, EditorRequired] public IReadOnlyList<Principal> Columns { get; set; } = null!;
+
+  /// <summary>Hash of the column list (sids in order): a new column changes every row.</summary>
+  [Parameter] public int ColumnsSig { get; set; }
+
+  /// <summary>Its level-1 folder is collapsed: the row is hidden (level 2+) or shows the collapsed caret (level 1).</summary>
+  [Parameter] public bool Collapsed { get; set; }
+
+  [Parameter] public int MaxLevel { get; set; }
+  [Parameter] public string Share { get; set; } = "";
+  [Parameter] public EventCallback<string> OnFolder { get; set; }
+  [Parameter] public EventCallback<string> OnToggle { get; set; }
+
+  int lastSig;
+
+  int Sig => HashCode.Combine(Row.Sig, ColumnsSig, Collapsed, MaxLevel, Share);
+
+  protected override bool ShouldRender()
+  {
+    var sig = Sig;
+    if (sig == lastSig) return false;
+    lastSig = sig;
+    return true;
+  }
+
+  protected override void OnInitialized() => lastSig = Sig; // the first render happens anyway (ShouldRender is not asked)
+
+  string RowClass()
+  {
+    var isTop = Row.Folder.Level == 1;
+    var c = $"l{Row.Folder.Level}";
+    if (Row.Deep != "") c += " deep " + Row.Deep;
+    if (!isTop && Collapsed) c += " hidden";
+    if (isTop && Collapsed) c += " collapsed";
+    return c;
+  }
+
+  string FolderClass() => $"folder l{Row.Folder.Level}" + (Row.Protected ? " prot" : "") + (Row.PendingFolder ? " pend" : "")
+    + (Row.IsNew ? " new" : "");
+
+  string InhTitle() => (Row.Protected ? "Inheritance broken" : "Inherits from parent") + (Row.PendingInheritance ? " (pending)" : "");
+
+  string? RowTitle() => Row.Deep switch
+  {
+    "odd" => $"Below the matrix depth ({MaxLevel}): shown because this folder has entries of its own, broken inheritance or cannot be read",
+    "way" => "Below the matrix depth: shown only as the way to a deeper folder",
+    _ => null,
+  };
+}

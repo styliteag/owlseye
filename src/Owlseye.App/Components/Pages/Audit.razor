@@ -1,0 +1,133 @@
+@page "/audit"
+@inherits PageBase
+
+<h1>Log</h1>
+@if (V is null)
+{
+  return;
+}
+<p class="muted mono">@V.Path</p>
+@if (V.Entries.Count > 0)
+{
+  <table class="list">
+    <tr><th>Time (UTC)</th><th>Who</th><th>Reason</th><th>Changes</th><th></th></tr>
+    @foreach (var e in V.Entries)
+    {
+      var kind = e.Str("kind");
+      var aclOps = e.Arr("acl_ops") ?? [];
+      var createOps = e.Arr("create_ops") ?? [];
+      var id = e.Str("id")!;
+      <tr>
+        <td class="mono">@e.Str("ts")</td><td>@e.Str("actor")</td>
+        <td>@(Json.Truthy(e["reason"]) ? e.Str("reason") : "–")@if (e.Str("status") == "error") {<br><span class="loss">@e.Str("error")</span>}</td>
+        <td class="small">
+          @if (kind == "baseline_init")
+          {
+            <span class="muted">Current state taken as the first desired state</span>
+          }
+          @if (kind == "baseline_reset")
+          {
+            <span class="loss">Desired state deleted</span> <span class="mono muted">@e.Str("path")</span>
+          }
+          @if (kind == "change_start")
+          {
+            var missing = (e.Arr("missing") ?? []).Select(m => m is JsonValue mv && mv.TryGetValue<string>(out var ms) ? ms : m?.ToJsonString() ?? "").ToList();
+            <span class="loss">Not finished: @(aclOps.Count + createOps.Count) of @e.Long("total") operations written.</span>
+            @if (missing.Count > 0)
+            {
+              <text> Not written: </text>
+              @for (var i = 0; i < missing.Count; i++)
+              {
+                <span class="mono">@Root(missing[i])</span>@(i < missing.Count - 1 ? ", " : "")
+              }
+              <text>.</text>
+            }
+            <br><span class="muted">owlseye was stopped while writing (or is still writing). The folder it was writing at that moment may be only partly done: check it in the matrix and apply it again.</span><br>
+          }
+          @foreach (var d in (e.Arr("accepted") ?? []).OfType<JsonObject>())
+          {
+            var ch = d.Str("change");
+            <span class="muted">kept:</span>
+            @if (ch == "folder_gone")
+            {
+              <text> folder missing </text><span class="mono">@d.Str("path")</span>
+            }
+            else if (ch is "broken" or "restored")
+            {
+              <text> inheritance @ch </text><span class="mono">@d.Str("path")</span>
+            }
+            else if (d.Str("name") is { } n)
+            {
+              <text> @ShortName(n) on </text><span class="mono">@Root(d.Str("path") ?? "")</span><text>: @Labels.Short(d.Str("before")) → @Labels.Short(d.Str("after"))</text>
+            }
+            else
+            {
+              <text> @ch</text>
+            }
+            <br>
+          }
+          @foreach (var p in createOps)
+          {
+            if (p is JsonValue v && v.TryGetValue<string>(out var path))
+            {
+              <span class="gain">＋ folder created</span> <span class="mono">@path</span><br>
+            }
+          }
+          @foreach (var a in aclOps.OfType<JsonObject>())
+          {
+            if (a.ContainsKey("protected_before"))
+            {
+              var path = Root(a.Str("path") ?? "");
+              if (a.Bool("cleared") == true)
+              {
+                <span class="loss">cleared</span> <span class="mono">@a.Str("path")</span> <span class="muted">(inherits, no own entries)</span><br>
+              }
+              else if (a.Bool("protected_before") != a.Bool("protected_after"))
+              {
+                var broke = a.Bool("protected_after") == true;
+                <span class="@(broke ? "loss" : "gain")">@(broke ? "⛔ inheritance broken" : "↳ inheritance restored")</span> <span class="mono">@path</span><br>
+              }
+              foreach (var c in (a.Arr("changes") ?? []).OfType<JsonObject>())
+              {
+                <span class="@(c.Str("after") is not null ? "gain" : "loss")">@ShortName(c.Str("name") ?? "")</span><text> on </text><span class="mono">@path</span><text>: @Labels.Short(c.Str("before")) → @Labels.Short(c.Str("after"))</text>@if (c.Bool("auto") == true) {<span class="muted"> (auto)</span>}<br>
+              }
+            }
+            else
+            {
+              <span class="muted">ACL change <span class="mono">@a.Str("path")</span> (earlier model)</span><br>
+            }
+          }
+          @foreach (var o in (e.Arr("ops") ?? []).OfType<JsonObject>())
+          {
+            <span class="muted">@o.Str("action") @o.Str("member") → @o.Str("group") (earlier model)</span><br>
+          }
+        </td>
+        <td>@if (aclOps.Count > 0 && aclOps[0] is JsonObject first && first.ContainsKey("protected_before")) {<button disabled="@Ui.Busy" @onclick="() => Undo(id)">Undo…</button>}</td>
+      </tr>
+    }
+  </table>
+}
+else
+{
+  <p class="muted">No changes yet.</p>
+}
+
+@code {
+  AuditView? V;
+
+  protected override void Refresh() => V = S.AuditPage();
+
+  static string ShortName(string name) => name[(name.LastIndexOf('\\') + 1)..];
+
+  void Undo(string id)
+  {
+    try
+    {
+      Go(S.Undo(id));
+    }
+    catch (UserError e)
+    {
+      Ui.SetFlash(e.Message, true);
+    }
+  }
+}

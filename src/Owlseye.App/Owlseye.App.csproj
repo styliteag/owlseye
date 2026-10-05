@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Owlseye.App</RootNamespace>
+    <AssemblyName>owlseye</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+    <ScopedCssEnabled>false</ScopedCssEnabled>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>owlseye.ico</ApplicationIcon>
+    <!-- everything the page needs is embedded in the exe; no wwwroot folder, no xml docs next to it -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <AllowedReferenceRelatedFileExtensions>.pdb</AllowedReferenceRelatedFileExtensions>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.110" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.0" />
+    <!-- only for its path: blazor.webview.js is embedded into the exe from there (see below) -->
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView" Version="10.0.0" GeneratePathProperty="true" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Owlseye.Core\Owlseye.Core.csproj" />
+    <ProjectReference Include="..\Owlseye.Windows\Owlseye.Windows.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- served from the exe itself (see OwlseyeWebView), so a single-file publish needs no wwwroot folder -->
+    <EmbeddedResource Include="wwwroot\**" />
+    <EmbeddedResource Include="$(PkgMicrosoft_AspNetCore_Components_WebView)\staticwebassets\blazor.webview.js" Link="wwwroot\_framework\blazor.webview.js" />
+    <EmbeddedResource Include="$(PkgMicrosoft_AspNetCore_Components_WebView)\staticwebassets\blazor.modules.json" Link="wwwroot\_framework\blazor.modules.json" />
+    <Resource Include="owlseye.ico" />
+    <Content Update="wwwroot\**" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+</Project>

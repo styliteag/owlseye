@@ -1,0 +1,38 @@
+@implements IDisposable
+@inject UiState Ui
+
+<div class="busy-box">
+  @{ var p = Ui.Progress; }
+  @if (p.Task != "")
+  {
+    <p class="phase">@(p.Phase != "" ? p.Phase : "Working")…</p>
+    @if (p.Total > 0)
+    {
+      <progress max="@p.Total" value="@p.Done"></progress>
+      <p class="small muted">@p.Done of @p.Total done</p>
+    }
+    else
+    {
+      <progress></progress>
+      <p class="small muted">@(p.Done > 0 ? p.Done.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " folders read" : "")</p>
+    }
+    <p class="mono small path">@p.Path</p>
+    @if (p.Task == "apply")
+    {
+      <p class="small"><b>Keep owlseye open until this is finished.</b></p>
+    }
+  }
+  else
+  {
+    <p class="phase">Working…</p>
+    <progress></progress>
+  }
+</div>
+
+@code {
+  protected override void OnInitialized() => Ui.ProgressChanged += Repaint;
+
+  void Repaint() => InvokeAsync(StateHasChanged);
+
+  public void Dispose() => Ui.ProgressChanged -= Repaint;
+}

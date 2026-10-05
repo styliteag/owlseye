@@ -1,0 +1,60 @@
+@page "/users"
+@inherits PageBase
+
+@if (V is null)
+{
+  return;
+}
+<div class="split">
+  <div>
+    <form class="toolbar" @onsubmit:preventDefault>
+      <input type="search" value="@Q" placeholder="Search users…" style="width:100%" @oninput="OnSearch">
+    </form>
+    <div class="userlist">
+      @foreach (var x in V.Users)
+      {
+        <a href="/users?u=@Enc(x.Dn)&q=@Enc(Q ?? "")" aria-current="@(V.Selected?.Dn == x.Dn ? "true" : null)">@x.Display <span class="muted">@x.Sam</span></a>
+      }
+    </div>
+  </div>
+  <div>
+    @if (V.Selected is { } sel)
+    {
+      <h1>@sel.Display <span class="muted mono">@sel.Sam</span></h1>
+      @if (V.Detail.Count > 0)
+      {
+        <table class="list">
+          <tr><th>Folder</th><th>Right</th><th>via</th></tr>
+          @foreach (var d in V.Detail)
+          {
+            <tr><td class="mono">@Root(d.Folder.Path)</td><td><span class="c @Labels.Css(d.Right)">@d.Right</span></td>
+              <td class="small">@foreach (var v in d.Via) {@v<br>}</td></tr>
+          }
+        </table>
+      }
+      else
+      {
+        <p class="muted">No access to managed folders.</p>
+      }
+    }
+    else
+    {
+      <p class="muted">Pick a user on the left to see their effective rights.</p>
+    }
+  </div>
+</div>
+
+@code {
+  [SupplyParameterFromQuery] public string? Q { get; set; }
+  [SupplyParameterFromQuery] public string? U { get; set; }
+
+  UsersView? V;
+
+  protected override void Refresh() => V = S.Users(Q ?? "", U ?? "");
+
+  void OnSearch(ChangeEventArgs e)
+  {
+    Q = e.Value?.ToString() ?? "";
+    Refresh();
+  }
+}

@@ -1,0 +1,65 @@
+@inject IJSRuntime JS
+<h3>Add a group</h3>
+<p class="muted small">Groups that already have an entry in this share are columns anyway. Search the directory for another group to give it rights here.</p>
+<form @onsubmit="Search">
+  <input type="search" id="gq" @bind="query" @bind:event="oninput" @bind:after="SearchSoon" placeholder="Group name starts with…" style="width: 100%">
+</form>
+@if (Model.Gq != "")
+{
+  @if (Model.HiddenHint)
+  {
+    <p class="state small">SYSTEM and Administrators are not columns: owlseye gives them full control on the root and on every folder with broken inheritance it writes. Creator Owner stays as it is.</p>
+  }
+  @if (Model.Hits.Count > 0)
+  {
+    <table class="list small">
+      @foreach (var h in Model.Hits)
+      {
+        var sid = h.Sid;
+        <tr><td class="mono">@h.Name</td>
+          <td>@if (Model.Shown.Contains(h.Sid)) {<span class="muted">column</span>} else {<button @onclick="() => OnAdd.InvokeAsync(sid)">Add</button>}</td></tr>
+      }
+    </table>
+  }
+  else if (!Model.HiddenHint)
+  {
+    <p class="muted small">No group found.</p>
+  }
+}
+
+@code {
+  [Parameter, EditorRequired] public GroupsPanel Model { get; set; } = null!;
+  [Parameter] public EventCallback<string> OnSearch { get; set; }
+  [Parameter] public EventCallback<string> OnAdd { get; set; }
+
+  string query = "";
+  CancellationTokenSource? delay;
+
+  protected override void OnInitialized() => query = Model.Gq;
+
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+    if (firstRender) await JS.InvokeVoidAsync("owlseye.focusInput", "gq");
+  }
+
+  async Task SearchSoon()
+  {
+    delay?.Cancel();
+    var cts = delay = new CancellationTokenSource();
+    try
+    {
+      await Task.Delay(300, cts.Token); // a directory query per keystroke would be too much
+    }
+    catch (TaskCanceledException)
+    {
+      return;
+    }
+    await OnSearch.InvokeAsync(query);
+  }
+
+  Task Search()
+  {
+    delay?.Cancel();
+    return OnSearch.InvokeAsync(query);
+  }
+}

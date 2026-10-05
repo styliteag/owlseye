@@ -1,0 +1,12 @@
+tmp/
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+publish/
+dist/
+.claude/worktrees/
+.vscode/settings.json

@@ -1,0 +1,24 @@
+@page "/findings"
+@inherits PageBase
+
+<h1>Findings: what does not match the model</h1>
+@if (items.Count > 0)
+{
+  <table class="list">
+    <tr><th>Severity</th><th>Folder</th><th>Finding</th></tr>
+    @foreach (var x in items)
+    {
+      <tr><td><span class="sev @x.Severity">@x.Severity</span></td><td class="mono"><a href="/folder?path=@Enc(x.Path)">@Root(x.Path)</a></td><td>@x.Text</td></tr>
+    }
+  </table>
+}
+else
+{
+  <p class="muted">No findings.</p>
+}
+
+@code {
+  IReadOnlyList<Finding> items = [];
+
+  protected override void Refresh() => items = S.FindingsPage();
+}

@@ -1,0 +1,111 @@
+@page "/preview"
+@inherits PageBase
+
+<h1>Preview</h1>
+@if (V is null)
+{
+  return;
+}
+@if (V.Error is not null)
+{
+  <div class="flash err">@V.Error</div>
+  <a href="/matrix">Back to the matrix</a>
+}
+else if (V.Plan is null || V.Plan.Empty)
+{
+  <p class="muted">No changes.</p>
+  <a href="/matrix">Back to the matrix</a>
+}
+else
+{
+  var plan = V.Plan;
+  <div class="cards">
+    <div class="card"><b>@plan.AclOps.Count</b>folders (ACLs)</div>
+    <div class="card"><b>@V.Cells</b>entries changed</div>
+    @if (plan.CreateOps.Count > 0)
+    {
+      <div class="card"><b>@plan.CreateOps.Count</b>new folders</div>
+    }
+    <div class="card"><b class="gain">@V.Gained.Count</b>rights gained</div>
+    <div class="card"><b class="loss">@V.Lost.Count</b>rights lost</div>
+  </div>
+  @if (plan.CreateOps.Count > 0)
+  {
+    <h2>New folders</h2>
+    <p>
+      @for (var i = 0; i < plan.CreateOps.Count; i++)
+      {
+        <span class="mono">@plan.CreateOps[i]</span>@(i < plan.CreateOps.Count - 1 ? ", " : "")
+      }
+    </p>
+    <p class="muted small">They inherit from their parent folder. Creating a folder cannot be undone automatically.</p>
+  }
+  <h2>ACL changes</h2>
+  <table class="list">
+    <tr><th>Folder</th><th>Group / account</th><th>before</th><th>after</th><th></th></tr>
+    @foreach (var o in plan.AclOps)
+    {
+      if (o.Cleared)
+      {
+        var gone = o.Before.Count(a => !a.Allow);
+        <tr><td class="mono">@o.Path</td><td colspan="3"><b>clear</b>: back to the default; inherits from the parent, no entries of its own@(gone > 0 ? $" (also removes {gone} deny entr{(gone == 1 ? "y" : "ies")})" : "")</td><td></td></tr>
+      }
+      else if (o.ProtectedBefore != o.ProtectedAfter)
+      {
+        <tr><td class="mono">@Root(o.Path)</td><td colspan="3" class="@(o.ProtectedAfter ? "loss" : "gain")">@(o.ProtectedAfter
+          ? "⛔ break inheritance (inherited entries become entries of this folder)"
+          : "↳ restore inheritance (explicit copies of inherited entries are removed)")</td><td></td></tr>
+      }
+      foreach (var c in o.Changes)
+      {
+        <tr><td class="mono">@Root(o.Path)</td><td>@ShortName(c.Name)</td>
+          <td>@Labels.Short(c.Before)</td><td class="@(c.After is not null ? "gain" : "loss")">@Labels.Short(c.After)</td>
+          <td>@if (c.Auto) {<span class="sev low">automatic R|</span>}</td></tr>
+      }
+    }
+  </table>
+  <p class="muted small">Only the entries listed change. Entries of other accounts, deny entries and special rights stay as they are; on folders with broken inheritance SYSTEM and Administrators keep (or get) full control. Windows applies each change to all subfolders; on large trees this can take a while.</p>
+  <h2>Effect on users</h2>
+  @if (plan.Impact.Count > 0)
+  {
+    var gained = V.Gained.ToHashSet();
+    <table class="list">
+      <tr><th>Folder</th><th>User</th><th>before</th><th>after</th></tr>
+      @foreach (var i in plan.Impact)
+      {
+        <tr><td class="mono">@Root(i.Path)</td><td>@i.Display <span class="muted">@i.User</span></td>
+          <td>@Labels.Short(i.Before)</td>
+          <td class="@(gained.Contains(i) ? "gain" : "loss")">@Labels.Short(i.After)</td></tr>
+      }
+    </table>
+  }
+  else
+  {
+    <p class="muted">No change for any user, for example because the right is already inherited.</p>
+  }
+  <form class="applyform" @onsubmit="Apply">
+    <input type="text" @bind="reason" placeholder="Reason or ticket (goes into the log)">
+    <button type="submit" class="primary" disabled="@Ui.Busy">Apply</button>
+    <a href="/matrix">Back</a>
+  </form>
+  <p class="muted">Before writing, owlseye reads every affected ACL again and stops if it was changed in the meantime.</p>
+}
+
+@code {
+  PreviewView? V;
+  string reason = "";
+
+  protected override void Refresh()
+  {
+    if (!Ui.Busy) V = S.Preview(); // while applying, the plan is being emptied: keep showing what is written
+  }
+
+  static string ShortName(string name) => name[(name.LastIndexOf('\\') + 1)..];
+
+  Task Apply()
+  {
+    var phash = V!.Phash;
+    var r = reason;
+    return Busy(() => S.Apply(r, phash));
+  }
+}

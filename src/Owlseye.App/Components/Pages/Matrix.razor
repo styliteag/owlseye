@@ -1,0 +1,345 @@
+@page "/"
+@page "/matrix"
+@inherits PageBase
+@inject IJSRuntime JS
+
+@if (V is null)
+{
+  return;
+}
+@if (V.DriftCount > 0)
+{
+  <div class="flash err">@V.DriftCount change(s) to ACL entries or folder inheritance made outside owlseye since the last desired state. <a href="/drift">Review: restore or keep</a></div>
+}
+<div class="toolbar">
+  <input type="search" id="q" value="@q" placeholder="Filter groups…" @oninput="OnFilter">
+  <button title="Add a group that has no entry in this share yet" @onclick="ShowGroups">＋ Group</button>
+  <button title="Share root: add a top-level folder" @onclick='() => ShowFolder("")'>＋ Folder</button>
+  <form class="depth" title="Levels shown in the matrix. Deeper folders appear only where they have entries of their own, broken inheritance or cannot be read. Remembered for you." @onsubmit:preventDefault>
+    <label>Depth <select value="@V.MaxLevel" @onchange="OnDepth">
+      @foreach (var d in State.Depths)
+      {
+        <option value="@d" selected="@(d == V.MaxLevel)">@d</option>
+      }
+    </select></label>
+  </form>
+  <div class="legend">
+    <span class="c W">W</span> Write
+    <span class="c R">R</span> Read
+    <span class="c RL">R|</span> list this folder only
+    <span class="c inh">R</span> inherited
+    <span class="c blocked">⊘</span> blocked (inheritance broken)
+    <span class="c pend R">R</span> pending
+    <span class="c auto RL">R|</span> automatic
+    · <span class="inh-icon off">⛔</span> inheritance broken
+    · Keys: arrows move, <kbd>R</kbd> <kbd>W</kbd>, <kbd>L</kbd> R|, <kbd>Shift</kbd>+<kbd>W</kbd> W|, <kbd>Del</kbd> none, <kbd>Enter</kbd> details
+  </div>
+</div>
+<div class="matrix-wrap">
+  <div id="matrix" class="matrix-main">
+    @if (V.PendingCount > 0)
+    {
+      <div class="pendingbar">
+        <strong>@V.PendingCount pending change@(V.PendingCount != 1 ? "s" : "")</strong>
+        @foreach (var p in V.PendingNew)
+        {
+          <span class="small pending-note">＋ @p</span>
+        }
+        @if (V.PlanError is not null)
+        {
+          <span class="loss small">@V.PlanError</span>
+        }
+        <a class="button primary" href="/preview">Preview</a>
+        <button @onclick="Discard">Discard</button>
+      </div>
+    }
+    <div class="matrix-scroll">
+      <table class="matrix" id="grid">
+        <thead>
+          <tr>
+            <th class="corner">Folder ↓ · Group →</th>
+            @{ var z = 1000; }
+            @foreach (var p in V.Columns)
+            {
+              z--;
+              <th @key="p.Sid" class="@ColClass(p)"
+                  title="@p.Name · @p.Kind · @V.UsersIn[p.Sid] users" style="z-index: @z"><div><span>@p.Short</span></div></th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @* Only the rows in view (plus a margin) exist in the page: a share with thousands of folders would otherwise
+             take seconds to draw. Collapsed folders are left out of the list instead of hidden. *@
+          <Virtualize Items="visibleRows" Context="r" ItemSize="29" OverscanCount="25" SpacerElement="tr">
+            <MatrixRowView @key="r.Folder.Path" Row="r" Columns="V.Columns" ColumnsSig="columnsSig" Collapsed="collapsed.Contains(r.Top)"
+                           MaxLevel="V.MaxLevel" Share="@St.Snap.Share" OnFolder="ShowFolder" OnToggle="Toggle" />
+          </Virtualize>
+        </tbody>
+      </table>
+      @if (V.Columns.Count == 0)
+      {
+        <p class="muted" style="padding: 12px">No group has an entry in this share yet. Add one with ＋ Group.</p>
+      }
+    </div>
+  </div>
+  <aside id="panel" class="panel">
+    @if (panelError is not null)
+    {
+      <p class="error small">@panelError</p>
+    }
+    @switch (panel)
+    {
+      case "cell" when cellPanel is not null:
+        <CellPanelView Model="cellPanel" OnSetRight="SetFromPanel" OnInheritance="InheritanceFromCell" />
+        break;
+      case "folder" when folderPanel is not null:
+        <FolderPanelView Model="folderPanel" OnInheritance="InheritanceFromFolder" OnClear="ClearFolder" TryNewFolder="NewFolder" OnCancelNew="CancelNew" />
+        break;
+      case "groups" when groupsPanel is not null:
+        <GroupsPanelView Model="groupsPanel" OnSearch="SearchGroups" OnAdd="AddColumn" />
+        break;
+      default:
+        <p class="muted">Click a cell or a folder to see where a right comes from and to change it.</p>
+        break;
+    }
+  </aside>
+</div>
+
+@code {
+  /// <summary>/matrix?q=… preselects the column filter.</summary>
+  [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+
+  MatrixView? V;
+  string q = "";
+  readonly HashSet<string> collapsed = [];
+  string panel = "";
+  string panelSid = "", panelPath = "", gq = "";
+  CellPanel? cellPanel;
+  FolderPanel? folderPanel;
+  GroupsPanel? groupsPanel;
+  string? panelError;
+  DotNetObjectReference<Matrix>? self;
+  CancellationTokenSource? filterDelay;
+
+  int columnsSig;
+
+  bool qTaken;
+
+  protected override void Refresh()
+  {
+    if (!St.Ready) return;
+    if (!qTaken)
+    {
+      q = Q ?? "";
+      qTaken = true;
+    }
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    V = S.Matrix(q);
+    Trace.Log("Session.Matrix", sw);
+    renderWatch = System.Diagnostics.Stopwatch.StartNew();
+    var h = new HashCode();
+    foreach (var p in V.Columns) h.Add(p.Sid);
+    columnsSig = h.ToHashCode();
+    VisibleRows();
+    RefreshPanel();
+  }
+
+  void RefreshPanel()
+  {
+    try
+    {
+      cellPanel = panel == "cell" ? S.CellPanel(panelSid, panelPath) : null;
+      folderPanel = panel == "folder" ? S.FolderPanel(panelPath) : null;
+      groupsPanel = panel == "groups" ? S.Groups(gq, groupsPanel?.Gq == gq ? groupsPanel.Hits : null) : null;
+    }
+    catch (UserError) // the folder or account is gone (cancelled new folder, rescan)
+    {
+      panel = "";
+    }
+  }
+
+  string ColClass(Principal p) => "gcol" + (V!.ExtraSids.Contains(p.Sid) ? " extra" : "") + (p.Kind == "user" ? " user" : "")
+    + (p.Kind == "unknown" ? " unknown" : "");
+
+  System.Diagnostics.Stopwatch? renderWatch;
+
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+    if (renderWatch is not null)
+    {
+      Trace.Log("render until after-render", renderWatch);
+      renderWatch = null;
+    }
+    if (firstRender)
+    {
+      self = DotNetObjectReference.Create(this);
+      await JS.InvokeVoidAsync("owlseye.init", self);
+    }
+    else await JS.InvokeVoidAsync("owlseye.refocus");
+  }
+
+  /// <summary>Run a matrix action: errors show in the panel. The session raises State.Changed, which recomputes the
+  /// matrix (PageBase); the panel may have switched in the action, so it is recomputed here as well.</summary>
+  void Act(Action action)
+  {
+    if (Ui.Busy) return; // a scan or apply holds the state; the keyboard focus may still sit on a cell under the overlay
+    panelError = null;
+    try
+    {
+      action();
+    }
+    catch (UserError e)
+    {
+      panelError = e.Message;
+    }
+    RefreshPanel();
+  }
+
+  [JSInvokable]
+  public void SetRight(string sid, string path, string right)
+  {
+    if (Ui.Busy) return;
+    Trace.Log($"SetRight {right} {path}");
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    (panel, panelSid, panelPath) = ("cell", sid, path);
+    Act(() => S.SetCell(sid, path, right));
+    Trace.Log("SetRight handled (SetCell + Changed + panel)", sw);
+    StateHasChanged();
+  }
+
+  [JSInvokable]
+  public void OpenCell(string sid, string path)
+  {
+    if (Ui.Busy) return;
+    (panel, panelSid, panelPath, panelError) = ("cell", sid, path, null);
+    RefreshPanel();
+    StateHasChanged();
+  }
+
+  void SetFromPanel(string right) => Act(() => S.SetCell(panelSid, panelPath, right));
+
+  void InheritanceFromCell(bool inherit)
+  {
+    var path = panelPath;
+    (panel, panelPath) = ("folder", path);
+    Act(() => S.SetInheritance(path, inherit));
+  }
+
+  void InheritanceFromFolder(bool inherit) => Act(() => S.SetInheritance(panelPath, inherit));
+
+  void ClearFolder() => Act(() => S.ClearFolder(panelPath));
+
+  /// <summary>true when the folder is pending; on a refusal the panel keeps the typed name and shows why.</summary>
+  bool NewFolder(string name)
+  {
+    var parent = panelPath;
+    var ok = false;
+    Act(() =>
+    {
+      S.NewFolder(parent, name);
+      ok = true;
+    });
+    StateHasChanged();
+    return ok;
+  }
+
+  void CancelNew(string path)
+  {
+    Act(() =>
+    {
+      var parent = S.CancelNewFolder(path);
+      (panel, panelPath) = ("folder", parent);
+    });
+  }
+
+  void ShowFolder(string path)
+  {
+    if (Ui.Busy) return;
+    (panel, panelPath, panelError) = ("folder", path, null);
+    RefreshPanel();
+  }
+
+  void ShowGroups()
+  {
+    if (Ui.Busy) return;
+    (panel, panelError, gq, groupsPanel) = ("groups", null, "", null); // a fresh search, like the web version
+    RefreshPanel();
+  }
+
+  void SearchGroups(string query)
+  {
+    if (Ui.Busy) return;
+    gq = query;
+    RefreshPanel();
+  }
+
+  void AddColumn(string sid)
+  {
+    groupsPanel = null; // "column" instead of "Add" for the added group: search again
+    Act(() => S.AddColumn(sid, gq));
+  }
+
+  List<MatrixRow> visibleRows = [];
+
+  void VisibleRows() => visibleRows = V!.Rows.Where(r => r.Folder.Level <= 1 || !collapsed.Contains(r.Top)).ToList();
+
+  void Toggle(string top)
+  {
+    if (!collapsed.Remove(top)) collapsed.Add(top);
+    VisibleRows();
+  }
+
+  /// <summary>Discard and Depth were full page loads in the web version: back to the placeholder panel, no filter.</summary>
+  void ResetView() => (panel, q) = ("", "");
+
+  void Discard()
+  {
+    ResetView();
+    Act(S.Discard);
+  }
+
+  void OnDepth(ChangeEventArgs e)
+  {
+    if (!int.TryParse(e.Value?.ToString(), out var d)) return;
+    ResetView();
+    Act(() => S.SetDepth(d));
+  }
+
+  async Task OnFilter(ChangeEventArgs e)
+  {
+    if (Ui.Busy) return;
+    q = e.Value?.ToString() ?? "";
+    filterDelay?.Cancel();
+    var cts = filterDelay = new CancellationTokenSource();
+    try
+    {
+      await Task.Delay(250, cts.Token);
+    }
+    catch (TaskCanceledException)
+    {
+      return;
+    }
+    if (!Ui.Busy) Refresh();
+  }
+
+  protected override void OnInitialized()
+  {
+    base.OnInitialized();
+    Ui.MatrixReset += OnMatrixReset;
+  }
+
+  void OnMatrixReset() => InvokeAsync(() =>
+  {
+    ResetView();
+    Refresh();
+    StateHasChanged();
+  });
+
+  public override void Dispose()
+  {
+    Ui.MatrixReset -= OnMatrixReset;
+    base.Dispose();
+    filterDelay?.Cancel();
+    self?.Dispose();
+  }
+}
