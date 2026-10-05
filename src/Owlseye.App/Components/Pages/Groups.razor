@@ -1,0 +1,171 @@
+@page "/groups"
+@inherits PageBase
+
+<form class="toolbar" @onsubmit:preventDefault>
+  <input type="search" value="@Q" placeholder="@(IsMatrix ? "Search users…" : "Search groups…")" @oninput="OnSearch">
+  <label title="All groups owlseye read from the directory: those with rights and the groups nested in them">
+    <input type="checkbox" checked="@IsAll" @onchange="ToggleAll"> All groups</label>
+  <span class="viewswitch">
+    <a href="@Link(view: "")" aria-current="@(IsMatrix ? null : "true")">List</a>
+    <a href="@Link(view: "matrix")" aria-current="@(IsMatrix ? "true" : null)">Membership matrix</a>
+  </span>
+</form>
+
+@if (IsMatrix && MV is { } mv)
+{
+  @if (mv.Everyone.Count > 0)
+  {
+    <p class="muted small">Not shown, every user is a member: @string.Join(", ", mv.Everyone.Select(p => p.Short)).</p>
+  }
+  @if (mv.Columns.Count == 0 || mv.Rows.Count == 0)
+  {
+    <p class="muted">No group memberships to show.</p>
+  }
+  else
+  {
+    <div class="mship-wrap">
+      <table class="mship">
+        <thead>
+          <tr>
+            <th class="who">User · @mv.Rows.Count</th>
+            @foreach (var c in mv.Columns)
+            {
+              <th class="rot"><a href="@Link(view: "", sid: c.Sid)" title="@c.Name"><span>@c.Short</span></a></th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          <Virtualize TItem="MembershipRow" Items="@(mv.Rows as ICollection<MembershipRow> ?? mv.Rows.ToList())" Context="r" ItemSize="24" SpacerElement="tr">
+            <tr>
+              <td class="who">@r.User.Display <span class="muted">@r.User.Sam</span></td>
+              @for (var i = 0; i < r.Marks.Length; i++)
+              {
+                var mark = r.Marks[i];
+                <td class="m" title="@(mark == 'D' ? "direct member" : mark == 'N' ? "member through a nested group" : null)">@(mark == 'D' ? "●" : mark == 'N' ? "○" : "")</td>
+              }
+            </tr>
+          </Virtualize>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">● direct member · ○ member through a nested group</p>
+  }
+}
+else if (V is { } v)
+{
+  <div class="split">
+    <div>
+      <div class="userlist">
+        @foreach (var g in v.Groups)
+        {
+          <a href="@Link(sid: g.P.Sid)" aria-current="@(v.Selected?.P.Sid == g.P.Sid ? "true" : null)">@g.P.Short
+            <span class="muted">@g.Users @(g.Users == 1 ? "user" : "users")@(g.Folders > 0 ? $" · {g.Folders} {(g.Folders == 1 ? "folder" : "folders")}" : "")</span></a>
+        }
+      </div>
+    </div>
+    <div>
+      @if (v.Selected is { } sel)
+      {
+        <h1>@sel.P.Short <span class="muted mono">@sel.P.Name</span></h1>
+        <p class="muted">@sel.Users @(sel.Users == 1 ? "user" : "users")@(sel.Everyone ? " (every user)" : "")
+          · own entries on @sel.Folders @(sel.Folders == 1 ? "folder" : "folders")</p>
+        @if (v.MemberOf.Count > 0)
+        {
+          <p><b>Member of:</b> @foreach (var x in v.MemberOf) {<a href="@Link(sid: x.Sid)">@x.Short</a><text> </text>}</p>
+        }
+        @if (v.Nested.Count > 0)
+        {
+          <p><b>Groups in it:</b> @foreach (var x in v.Nested) {<a href="@Link(sid: x.Sid)">@x.Short</a><text> </text>}</p>
+        }
+        <h2>Rights</h2>
+        @if (v.Rights.Count > 0)
+        {
+          <table class="list">
+            <tr><th>Folder</th><th>Right</th><th></th></tr>
+            @foreach (var r in v.Rights.Take(MaxRows))
+            {
+              <tr><td class="mono"><a href="/folder?path=@Enc(r.Folder.Path)">@Root(r.Folder.Path)</a></td>
+                <td><span class="c @Labels.Css(r.Right) @(r.Own ? "" : "inh")">@r.Right</span></td>
+                <td class="muted small">@(r.Own ? "entry here" : "inherited")</td></tr>
+            }
+          </table>
+          @if (v.Rights.Count > MaxRows)
+          {
+            <p class="muted small">… and @(v.Rights.Count - MaxRows) more folders.</p>
+          }
+        }
+        else
+        {
+          <p class="muted">No rights on the folders shown in the matrix.</p>
+        }
+        <h2>Members</h2>
+        @if (v.Members.Count > 0)
+        {
+          <table class="list">
+            <tr><th>User</th><th>how</th></tr>
+            @foreach (var x in v.Members.Take(MaxRows))
+            {
+              <tr><td><a href="/users?u=@Enc(x.User.Dn)">@x.User.Display</a> <span class="muted">@x.User.Sam@(x.User.Enabled ? "" : ", disabled")</span></td>
+                <td class="small">@(x.Via == "" ? "direct" : $"via {x.Via}")</td></tr>
+            }
+          </table>
+          @if (v.Members.Count > MaxRows)
+          {
+            <p class="muted small">… and @(v.Members.Count - MaxRows) more members.</p>
+          }
+        }
+        else
+        {
+          <p class="muted">@(sel.P.Kind == "wellknown" ? "Every user." : "No members owlseye knows.")</p>
+        }
+      }
+      else
+      {
+        <p class="muted">Pick a group on the left to see its rights, members and nesting. @(IsAll ? "" : "Shown are the groups with rights on this share; \"All groups\" adds the groups nested in them.")</p>
+      }
+    </div>
+  </div>
+}
+
+@code {
+  [SupplyParameterFromQuery] public string? Q { get; set; }
+  [SupplyParameterFromQuery(Name = "g")] public string? G { get; set; }
+  [SupplyParameterFromQuery] public string? All { get; set; }
+  [SupplyParameterFromQuery] public string? View { get; set; }
+
+  const int MaxRows = 500;
+  GroupsView? V;
+  MembershipView? MV;
+
+  bool IsAll => All == "1";
+  bool IsMatrix => View == "matrix";
+
+  protected override void Refresh()
+  {
+    if (IsMatrix) MV = S.MembershipMatrix(Q ?? "", IsAll);
+    else V = S.GroupsPage(Q ?? "", G ?? "", IsAll);
+  }
+
+  string Link(string? view = null, string? sid = null)
+  {
+    var v = view ?? (IsMatrix ? "matrix" : "");
+    var parts = new List<string>();
+    if (v != "") parts.Add("view=" + v);
+    if (IsAll) parts.Add("all=1");
+    if (sid is not null) parts.Add("g=" + Enc(sid));
+    else if (v == "" && G is { Length: > 0 }) parts.Add("g=" + Enc(G));
+    return "/groups" + (parts.Count > 0 ? "?" + string.Join("&", parts) : "");
+  }
+
+  void OnSearch(ChangeEventArgs e)
+  {
+    Q = e.Value?.ToString() ?? "";
+    Refresh();
+  }
+
+  void ToggleAll(ChangeEventArgs e)
+  {
+    All = e.Value is true ? "1" : null;
+    Refresh();
+  }
+}

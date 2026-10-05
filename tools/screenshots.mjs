@@ -127,6 +127,14 @@ try {
   await until(`document.querySelector('main h1')?.innerText.startsWith('Emma Evans')`, 'user');
   await shot('users.png');
 
+  // 7b groups: one group with its rights, members and nesting; the membership matrix
+  await go('/groups', `document.querySelectorAll('.userlist a').length > 5`);
+  await clickText('.userlist a', 'G-Operations');
+  await until(`document.querySelector('main h1')?.innerText.startsWith('G-Operations')`, 'group');
+  await shot('groups.png');
+  await go('/groups?view=matrix', `document.querySelector('table.mship td.m')`);
+  await shot('groups-matrix.png');
+
   // 8 findings and 9 a folder page
   await go('/findings', `document.querySelector('main table')`);
   await shot('findings.png');

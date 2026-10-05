@@ -17,6 +17,7 @@ else
     <nav>
       <a href="/matrix" aria-current="@Current("matrix", "folder")">Matrix</a>
       <a href="/users" aria-current="@Current("users")">Users</a>
+      <a href="/groups" aria-current="@Current("groups")">Groups</a>
       <a href="/findings" aria-current="@Current("findings")"><text>Findings</text>@if (St.Findings.Count > 0)
         {
           <span class="badge">@St.Findings.Count</span>

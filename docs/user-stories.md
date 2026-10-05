@@ -40,7 +40,7 @@ own account: no service account, no stored password.
 ### 1.3 What can one user reach?
 
 > As an admin, I want to pick a user and see every folder they can reach and through which groups, so that I can answer
-> "why can Eva open this?" without clicking through properties dialogs.
+> "why can Emma open this?" without clicking through properties dialogs.
 
 ![Effective rights of one user](screenshots/users.png)
 
@@ -55,6 +55,21 @@ own account: no service account, no stored password.
 ![Folder page](screenshots/folder.png)
 
 - Users with access, sorted by right; findings of the folder; the explicit ACL with mask and flags (F-V2).
+
+### 1.5 What does one group do, and who is in it?
+
+> As an admin, I want to pick a group and see where it has rights and who is in it, directly or through nested groups,
+> and to see all memberships at a glance, so that I can clean up groups and explain where access comes from.
+
+![One group: rights, members and nesting](screenshots/groups.png)
+
+- **Groups** tab: the groups with rights on the share; "All groups" adds the groups nested in them. For the selected
+  group: its rights (own entry or inherited), its members with "direct" or "via" the nested group, the groups in it
+  and the groups it is in.
+- **Membership matrix:** users × groups, ● direct member, ○ member through a nested group. Groups every user is in
+  (Domain Users, Authenticated Users, an all-staff group) are named above instead of shown as full columns.
+
+![Membership matrix](screenshots/groups-matrix.png)
 
 ---
 

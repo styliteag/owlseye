@@ -211,3 +211,19 @@ table.list th { font-size: 12px; color: var(--muted); font-weight: 500; }
 }
 
 .tag.unsafe { border-color: var(--bad); color: var(--bad); text-transform: none; letter-spacing: 0; cursor: help; }
+
+/* Groups page: list/matrix switch and the membership matrix (users x groups) */
+.viewswitch { display: inline-flex; gap: 4px; margin-left: auto; }
+.viewswitch a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); text-decoration: none; }
+.viewswitch a[aria-current] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mship-wrap { overflow: auto; max-height: calc(100vh - 190px); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.mship { border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.mship td { border-bottom: 1px solid var(--line); height: 23px; }
+.mship thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; border-bottom: 1px solid var(--line); }
+.mship .who { position: sticky; left: 0; background: var(--panel); text-align: left; padding: 2px 12px; white-space: nowrap; }
+.mship thead th.who { z-index: 2; vertical-align: bottom; font-weight: 600; }
+.mship th.rot { min-width: 26px; max-width: 26px; vertical-align: bottom; padding: 6px 0; }
+.mship th.rot a { display: block; width: 26px; color: var(--ink); text-decoration: none; text-align: center; }
+.mship th.rot span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; font-weight: 500; }
+.mship td.m { min-width: 26px; text-align: center; color: var(--accent); }
+.mship tbody tr:hover td { background: var(--hl); }

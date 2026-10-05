@@ -6,7 +6,7 @@ using Owlseye.Providers;
 
 namespace Owlseye.Ui;
 
-public sealed class Session(State st)
+public sealed partial class Session(State st)
 {
     public State St { get; } = st;
 
