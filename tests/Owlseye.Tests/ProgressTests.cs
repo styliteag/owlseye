@@ -211,7 +211,7 @@ public sealed class ProgressTests : TestBase
     }
 
     [Fact]
-    public void EachWriteIsLoggedAndDesiredBeforeTheNext()
+    public void EachWriteIsLoggedBeforeTheNextAndDesiredInBatches()
     {
         var p = new Hooked(new SimProvider(SimDir()));
         var (st, s) = Client(p);
@@ -225,7 +225,10 @@ public sealed class ProgressTests : TestBase
             seen.Add((st.Progress.Now.Task, kinds.Count(k => k == "change_step"), desired.Cells.ContainsKey((Demo.Gsid("G-Interns"), ""))));
         };
         Assert.Contains("3 changes applied", Apply(s, "T-4").Message);
-        Assert.Equal([("apply", 0, false), ("apply", 1, true), ("apply", 2, true)], seen);
+        // the log has every write before the next; the desired state (a large file on a large share) is saved after
+        // up to 25 folders or 2 seconds, and at the end
+        Assert.Equal([("apply", 0, false), ("apply", 1, false), ("apply", 2, false)], seen);
+        Assert.True(st.Baseline.Load(st.Snap.Share)!.Cells.ContainsKey((Demo.Gsid("G-Interns"), "")));
         // start and steps folded away
         Assert.Equal(new HashSet<string?> { "baseline_init", "change" }, st.Audit.Entries().Select(e => e.Str("kind")).ToHashSet());
         Assert.DoesNotContain(s.AuditPage().Entries, e => e.Str("kind") == "change_start"); // "Not finished" not in the log

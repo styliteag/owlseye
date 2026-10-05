@@ -61,7 +61,7 @@ else
   <h2>ACL changes</h2>
   <table class="list">
     <tr><th>Folder</th><th>Group / account</th><th>before</th><th>after</th><th></th></tr>
-    @foreach (var o in plan.AclOps)
+    @foreach (var o in plan.AclOps.Take(MaxOps))
     {
       if (o.Cleared)
       {
@@ -82,6 +82,10 @@ else
       }
     }
   </table>
+  @if (plan.AclOps.Count > MaxOps)
+  {
+    <p class="muted small">The first @MaxOps of @plan.AclOps.Count folders are listed; apply writes all of them.</p>
+  }
   <p class="muted small">Only the entries listed change. Entries of other accounts, deny entries and special rights stay as they are; on folders with broken inheritance SYSTEM and Administrators keep (or get) full control. Windows applies each change to all subfolders; on large trees this can take a while.</p>
   @if (plan.AclOps.SelectMany(o => o.Changes).Any(c => c.After == "F" && c.Before != "F"))
   {
@@ -94,13 +98,18 @@ else
     var gained = V.Gained.ToHashSet();
     <table class="list">
       <tr><th>Folder</th><th>User</th><th>before</th><th>after</th></tr>
-      @foreach (var i in plan.Impact)
+      @foreach (var i in plan.Impact.Take(MaxImpact))
       {
         <tr><td class="mono">@Root(i.Path)</td><td>@i.Display <span class="muted">@i.User</span></td>
           <td>@Labels.Short(i.Before)</td>
           <td class="@(gained.Contains(i) ? "gain" : "loss")">@Labels.Short(i.After)</td></tr>
       }
     </table>
+    @if (plan.Impact.Count > MaxImpact)
+    {
+      <p class="muted small">… and @(plan.Impact.Count - MaxImpact) more (@plan.Impact.Select(i => i.User).Distinct().Count() users,
+        @plan.Impact.Select(i => i.Path).Distinct().Count() folders in all; the counts above cover everything).</p>
+    }
   }
   else
   {
@@ -115,6 +124,8 @@ else
 }
 
 @code {
+  // a change on a large share can affect thousands of folders and users: drawing every row would freeze the window
+  const int MaxOps = 500, MaxImpact = 200;
   PreviewView? V;
   string reason = "";
 

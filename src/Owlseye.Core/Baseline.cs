@@ -17,6 +17,10 @@ public sealed class Desired
     public Dictionary<(string Sid, string Path), string> Cells { get; init; } = []; // (sid, path) -> R| | R | W| | W
     public Dictionary<string, string> Names { get; init; } = []; // sid -> DOMAIN\name, for display
     public HashSet<string> Protected { get; init; } = []; // folders with broken inheritance; absent = inherits
+
+    /// <summary>Written before format 2 (owlseye 0.9.12 and older): full control was saved as W, not F. The comparison
+    /// treats such a W as F, and the next save writes F (Drift.Upgrade).</summary>
+    public bool Legacy { get; init; }
 }
 
 /// <summary>Desired-state file unreadable or broken. Never overwrite, admin must investigate.</summary>
@@ -36,6 +40,9 @@ public sealed partial class BaselineStore
     }
 
     public string? Dir { get; }
+
+    /// <summary>2: full control is its own cell value F (before: W).</summary>
+    public const int Format = 2;
 
     [GeneratedRegex(@"[^\w.-]+")]
     private static partial Regex Unsafe();
@@ -110,7 +117,7 @@ public sealed partial class BaselineStore
             cells[((string)c![0]!, (string)c[1]!)] = (string)c[2]!;
         var names = data.Obj("names")!.ToDictionary(kv => kv.Key, kv => (string)kv.Value!);
         var prot = data.Arr("protected")!.Select(p => (string)p!).ToHashSet();
-        return new Desired { Cells = cells, Names = names, Protected = prot };
+        return new Desired { Cells = cells, Names = names, Protected = prot, Legacy = (data.Long("format") ?? 1) < Format };
     }
 
     /// <summary>For display: location, whether present, last changed by/at. Never throws (even on a broken file).</summary>
@@ -170,6 +177,7 @@ public sealed partial class BaselineStore
         var entry = new JsonObject
         {
             ["share"] = share,
+            ["format"] = Format,
             ["updated"] = Clock.Now(),
             ["by"] = actor,
             ["cells"] = new JsonArray(cells.Select(c => (JsonNode)new JsonArray(c.Select(x => (JsonNode)x!).ToArray())).ToArray()),

@@ -57,7 +57,7 @@ else if (V.Items.Count > 0)
   <table class="list">
     <tr><th><input type="checkbox" checked="@(selected.Count == V.Items.Count)" @onchange="ToggleAll"></th>
         <th>Change</th><th>Folder</th><th>Group / account</th><th>desired</th><th>current</th></tr>
-    @foreach (var d in V.Items)
+    @foreach (var d in V.Items.Take(MaxItems))
     {
       var key = d.Key;
       <tr>
@@ -79,6 +79,11 @@ else if (V.Items.Count > 0)
       </tr>
     }
   </table>
+  @if (V.Items.Count > MaxItems)
+  {
+    <p class="muted small">The first @MaxItems of @V.Items.Count differences are shown. The checkbox in the header selects
+      all @V.Items.Count; the buttons act on everything selected (@selected.Count), also on the rows not shown.</p>
+  }
   <div class="applyform">
     <button class="primary" title="Recreate missing folders and reset entries and inheritance to the desired state (preview first)" @onclick="Revert">Restore desired state…</button>
     <input type="text" @bind="keepReason" placeholder="Reason for keeping (goes into the log)">
@@ -89,12 +94,17 @@ else if (V.Items.Count > 0)
   {
     <table class="list">
       <tr><th>Folder</th><th>User</th><th>desired</th><th>current</th></tr>
-      @foreach (var i in V.Impact)
+      @foreach (var i in V.Impact.Take(MaxImpact))
       {
         <tr><td class="mono">@Root(i.Path)</td><td>@i.Display <span class="muted">@i.User</span></td>
           <td>@Labels.Short(i.Before)</td><td>@Labels.Short(i.After)</td></tr>
       }
     </table>
+    @if (V.Impact.Count > MaxImpact)
+    {
+      <p class="muted small">… and @(V.Impact.Count - MaxImpact) more (@V.Impact.Select(i => i.User).Distinct().Count() users,
+        @V.Impact.Select(i => i.Path).Distinct().Count() folders in all).</p>
+    }
   }
   else
   {
@@ -107,6 +117,8 @@ else
 }
 
 @code {
+  // a large share can have tens of thousands of differences: drawing them all would freeze the window
+  const int MaxItems = 500, MaxImpact = 200;
   DriftView? V;
   HashSet<string> selected = [];
   HashSet<string> known = [];

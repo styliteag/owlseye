@@ -388,8 +388,8 @@ public sealed class Session(State st)
     static JsonArray Strs(IEnumerable<string> xs) => new(xs.Select(x => (JsonNode)x!).ToArray());
 
     /// <summary>New folders first, then the ACLs (parents first). Stops at the first failed write. Each write is logged
-    /// (as a step of `run`) and carried into the desired state as soon as it is done: if owlseye is stopped halfway
-    /// (window closed, logoff), the log and the desired state still match the file system.</summary>
+    /// (as a step of `run`) right away and carried into the desired state within seconds: if owlseye is stopped halfway
+    /// (window closed, logoff), the log matches the file system and the desired state lacks at most the last writes.</summary>
     (List<string> Created, List<AclOp> Written, List<string> Errors) Execute(Plan plan, string run)
     {
         var doneCreate = new List<string>();
@@ -409,6 +409,28 @@ public sealed class Session(State st)
             doneCreate.Add(path);
             St.Audit.Append(new JsonObject { ["kind"] = "change_step", ["run"] = run, ["create"] = path });
         }
+        // The desired state of a large share is a large file: it is saved after at most 25 written folders or 2 seconds,
+        // and at the end or on an error, not after every folder. Stopped hard in between, the last few writes are in the
+        // log but not in the desired state; the comparison then lists them, to keep.
+        var unsaved = new List<AclOp>();
+        var sinceSave = System.Diagnostics.Stopwatch.StartNew();
+        void SaveDesired()
+        {
+            if (unsaved.Count > 0 && errors.Count == 0) // once it could not be saved, do not try again
+            {
+                var ops = unsaved.ToList();
+                try
+                {
+                    St.Baseline.Update(St.Snap.Share, d => Owlseye.Drift.Applied(Owlseye.Drift.Upgrade(d, St.Snap), ops), St.Actor);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or BaselineError)
+                {
+                    errors.Add($"desired state not saved: {e.Message}");
+                }
+            }
+            unsaved.Clear();
+            sinceSave.Restart();
+        }
         foreach (var o in plan.AclOps)
         {
             St.Progress.Set(phase: "Writing ACLs", path: o.Path, done: doneCreate.Count + doneAcl.Count);
@@ -420,22 +442,15 @@ public sealed class Session(State st)
             }
             catch (Exception e)
             {
+                SaveDesired(); // what was written before stays recorded
                 return (doneCreate, doneAcl, [$"ACL of {(o.Path != "" ? o.Path : "the share root")}: {e.Message}", .. errors]);
             }
             doneAcl.Add(o);
             St.Audit.Append(new JsonObject { ["kind"] = "change_step", ["run"] = run, ["acl_op"] = Json.ToNode(o) }); // log first
-            if (errors.Count == 0) // once it could not be saved, do not try again for every folder
-            {
-                try
-                {
-                    St.Baseline.Update(St.Snap.Share, d => Owlseye.Drift.Applied(d, [o]), St.Actor);
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException or BaselineError)
-                {
-                    errors.Add($"desired state not saved: {e.Message}");
-                }
-            }
+            unsaved.Add(o);
+            if (unsaved.Count >= 25 || sinceSave.ElapsedMilliseconds > 2000) SaveDesired();
         }
+        SaveDesired();
         return (doneCreate, doneAcl, errors);
     }
 
@@ -589,6 +604,10 @@ public sealed class Session(State st)
         return new Outcome("/drift", "Desired state deleted. The current state is the new desired state.");
     }
 
+    /// <summary>At most this many kept items go into the log entry (with the full count); a large share can have tens
+    /// of thousands.</summary>
+    public const int MaxLogged = 500;
+
     List<DriftItem> Selected(IEnumerable<string>? keys)
     {
         var want = (keys ?? []).ToHashSet();
@@ -605,7 +624,7 @@ public sealed class Session(State st)
             if (items.Count == 0) return new Outcome("/drift", "Nothing selected.");
             try
             {
-                St.Baseline.Update(St.Snap.Share, d => Owlseye.Drift.Accept(d, items), St.Actor);
+                St.Baseline.Update(St.Snap.Share, d => Owlseye.Drift.Accept(Owlseye.Drift.Upgrade(d, St.Snap), items), St.Actor);
             }
             catch (BaselineError e)
             {
@@ -619,7 +638,8 @@ public sealed class Session(State st)
                 ["share"] = St.Snap.Share,
                 ["reason"] = reason.Trim(),
                 ["status"] = "ok",
-                ["accepted"] = new JsonArray(items.Select(d => Json.ToNode(d)).ToArray()),
+                ["accepted"] = new JsonArray(items.Take(MaxLogged).Select(d => Json.ToNode(d)).ToArray()),
+                ["accepted_count"] = items.Count, // the list is cut at MaxLogged items: one log line, not megabytes
             });
             n = items.Count;
             St.Rescan();

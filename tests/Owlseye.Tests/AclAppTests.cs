@@ -572,6 +572,9 @@ public sealed class AclAppTests : TestBase
         Assert.Equal("error", entry.Str("status"));
         Assert.Equal([""], AclOps(entry).Select(o => o.Str("path")));
         Assert.Contains(G("G-Interns"), AceSids(Acl(sim, ""))); // the first write stayed
+        // and is in the desired state, although the desired state is saved in batches
+        Assert.Equal("R|", st.Baseline.Load(st.Snap.Share)!.Cells.GetValueOrDefault((G("G-Interns"), "")));
+        Assert.DoesNotContain(st.Drift, d => d.Sid == G("G-Interns"));
     }
 
     [Fact]

@@ -44,7 +44,11 @@
             }
             <br><span class="muted">owlseye was stopped while writing (or is still writing). The folder it was writing at that moment may be only partly done: check it in the matrix and apply it again.</span><br>
           }
-          @foreach (var d in (e.Arr("accepted") ?? []).OfType<JsonObject>())
+          @{
+            var accepted = (e.Arr("accepted") ?? []).OfType<JsonObject>().ToList();
+            var acceptedTotal = e.Long("accepted_count") ?? accepted.Count;
+          }
+          @foreach (var d in accepted.Take(20))
           {
             var ch = d.Str("change");
             <span class="muted">kept:</span>
@@ -65,6 +69,10 @@
               <text> @ch</text>
             }
             <br>
+          }
+          @if (acceptedTotal > 20)
+          {
+            <span class="muted">… and @(acceptedTotal - 20) more kept</span><br>
           }
           @foreach (var p in createOps)
           {
