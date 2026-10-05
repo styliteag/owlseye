@@ -7,12 +7,17 @@ namespace Owlseye.Ui;
 /// <param name="File">the config.json in use, null if none</param>
 /// <param name="SaveTo">where saving goes: that file if it can be written, else the admin's own one</param>
 /// <param name="Required">the full_control accounts as found in this share's ACLs</param>
+/// <param name="State">the state folder as set ("" = the data folder)</param>
 public sealed record SettingsView(string? File, string SaveTo, bool CanSave, string? Blocked, int ScanDepth, string Write,
-    IReadOnlyList<string> Hidden, IReadOnlyList<string> FullControl, IReadOnlyList<Principal> Required, string Audit,
-    string Baseline, string AuditPath, string? BaselineDir, string Provider);
+    IReadOnlyList<string> Hidden, IReadOnlyList<string> FullControl, IReadOnlyList<Principal> Required, string State,
+    string StateDir, string AuditPath, string? BaselineDir, string Provider);
 
 public sealed record SettingsInput(int ScanDepth, string Write, IReadOnlyList<string> Hidden, IReadOnlyList<string> FullControl,
-    string Audit, string Baseline);
+    string State);
+
+/// <param name="Moved">files moved into the new state folder</param>
+/// <param name="Existing">the new folder already held owlseye state (another admin uses it): nothing was moved</param>
+public sealed record StateMove(IReadOnlyList<string> Moved, bool Existing);
 
 public sealed partial class Session
 {
@@ -49,8 +54,47 @@ public sealed partial class Session
             var (target, blocked) = SaveTarget();
             var reason = blocked ?? (St.PendingCount > 0 ? "Apply or discard the pending changes first: saving rescans the share." : null);
             return new SettingsView(c.File, target, reason is null, reason, c.ScanDepth, c.Write, c.Hidden, c.FullControl,
-                St.Ready ? Rights.RequiredFullControl(St.Snap) : [], c.Audit, c.Baseline, c.AuditPath, c.BaselineDir, c.Provider);
+                St.Ready ? Rights.RequiredFullControl(St.Snap) : [], c.State, c.StateDir, c.AuditPath, c.BaselineDir, c.Provider);
         }
+    }
+
+    static bool SamePath(string a, string b) => string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Moves the desired-state files and the logs from where `from` keeps them into the state folder of `to`,
+    /// if that folder holds none yet. All are copied first and the originals deleted afterwards: a failure leaves
+    /// everything where it was. If the folder already holds owlseye state (another admin uses it), nothing is moved
+    /// and that state is used from now on.</summary>
+    public static StateMove MoveState(Config from, Config to)
+    {
+        var dir = to.StateDir;
+        Directory.CreateDirectory(dir);
+        if (Directory.EnumerateFiles(dir, "desired-*.json").Any() || Directory.EnumerateFiles(dir, "audit*.jsonl").Any())
+            return new StateMove([], true);
+        var files = new List<(string From, string To)>();
+        if (from.BaselineDir is { } bd && to.BaselineDir is { } nd && Directory.Exists(bd))
+            foreach (var f in Directory.EnumerateFiles(bd, "desired-*.json")) files.Add((f, Path.Combine(nd, Path.GetFileName(f))));
+        if (File.Exists(from.AuditPath)) files.Add((from.AuditPath, to.AuditPath)); // the log in use, under its new name
+        if (Directory.Exists(from.StateDir)) // the logs of the other providers along with it
+            foreach (var f in Directory.EnumerateFiles(from.StateDir, "audit-*.jsonl"))
+                if (!files.Any(x => SamePath(x.From, f))) files.Add((f, Path.Combine(dir, Path.GetFileName(f))));
+        files = files.Where(x => !SamePath(x.From, x.To)).ToList();
+        var copied = new List<string>();
+        try
+        {
+            foreach (var (src, dst) in files)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dst))!);
+                File.Copy(src, dst, overwrite: false);
+                copied.Add(dst);
+            }
+        }
+        catch
+        {
+            foreach (var c in copied) File.Delete(c);
+            throw;
+        }
+        foreach (var (src, _) in files) File.Delete(src);
+        return new StateMove(copied, false);
     }
 
     static List<string> Clean(IEnumerable<string> xs) =>
@@ -75,9 +119,9 @@ public sealed partial class Session
                 Write = input.Write,
                 Hidden = Clean(input.Hidden),
                 FullControl = Clean(input.FullControl) is { Count: > 0 } fc ? fc : M.DefaultFullControl,
-                Audit = input.Audit.Trim(),
-                Baseline = input.Baseline.Trim(),
+                State = input.State.Trim().TrimEnd('\\'),
             };
+            if (neu.State != old.State) neu = neu with { Audit = "", Baseline = "" }; // both follow the state folder now
             var changes = new JsonObject();
             void Diff(string key, JsonNode? before, JsonNode? after)
             {
@@ -88,9 +132,21 @@ public sealed partial class Session
             Diff("write", old.Write, neu.Write);
             Diff("hidden", Arr(old.Hidden), Arr(neu.Hidden));
             Diff("full_control", Arr(old.FullControl), Arr(neu.FullControl));
+            Diff("state", old.State, neu.State);
             Diff("audit", old.Audit, neu.Audit);
             Diff("baseline", old.Baseline, neu.Baseline);
             if (changes.Count == 0) return new Outcome("/settings", "Nothing changed.");
+            var moveState = !SamePath(old.AuditPath, neu.AuditPath) || old.BaselineDir != neu.BaselineDir;
+            StateMove? moved = null;
+            if (moveState)
+                try
+                {
+                    moved = MoveState(old, neu);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+                {
+                    return new Outcome("/settings", $"State folder not changed: {e.Message}", true);
+                }
             try
             {
                 // the admin's own file starts as a copy of the one in use, so provider, share etc. stay
@@ -106,7 +162,8 @@ public sealed partial class Session
                 return new Outcome("/settings", $"Settings not saved: {e.Message}", true);
             }
             M.Configure(neu.Write, neu.Hidden, neu.FullControl);
-            St.ApplySettings(neu with { File = target });
+            if (moveState) St.UseState(neu with { File = target }); // the log entry below goes into the new log
+            else St.ApplySettings(neu with { File = target });
             St.Audit.Append(new JsonObject
             {
                 ["kind"] = "settings",
@@ -117,15 +174,17 @@ public sealed partial class Session
                 ["status"] = "ok",
                 ["file"] = target,
                 ["changes"] = changes,
+                ["moved"] = moved is null ? null : new JsonArray(moved.Moved.Select(m => (JsonNode)m!).ToArray()),
             });
-            var restart = changes.ContainsKey("audit") || changes.ContainsKey("baseline");
             if (changes.ContainsKey("scan_depth") && St.OpenShare is not null && St.Ready)
                 St.Switch(St.OpenShare(St.Provider.Share)); // a provider with the new depth, scanned anew
             else
                 St.Rescan();
             message = $"Settings saved to {target}."
                 + (changes.ContainsKey("scan_depth") && St.OpenShare is null ? " The scan depth applies at the next start." : "")
-                + (restart ? " The log and desired-state folders apply at the next start." : "");
+                + (moved is null ? "" : moved.Existing
+                    ? $" {neu.StateDir} already held owlseye state: it is used from now on, nothing was moved."
+                    : $" Moved {moved.Moved.Count} {(moved.Moved.Count == 1 ? "file" : "files")} to {neu.StateDir}.");
         }
         St.NotifyChanged();
         return new Outcome("/settings", message);

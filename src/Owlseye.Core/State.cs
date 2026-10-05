@@ -27,8 +27,8 @@ public sealed class State
 
     public Config Cfg { get; private set; }
     public IProvider Provider { get; private set; }
-    public AuditLog Audit { get; }
-    public BaselineStore Baseline { get; }
+    public AuditLog Audit { get; private set; }
+    public BaselineStore Baseline { get; private set; }
 
     public OrderedDictionary<(string Sid, string Path), string?> Pending { get; } = []; // (sid, path) -> desired explicit entry
     public OrderedDictionary<string, bool> PendingFolders { get; } = []; // path -> inheritance broken?
@@ -41,6 +41,17 @@ public sealed class State
 
     /// <summary>The config.json was given with --config: the settings page may only save there.</summary>
     public bool ConfigFromCommandLine { get; set; }
+
+    /// <summary>Another state folder (settings page): the log and the desired state are read and written there from now on.</summary>
+    public void UseState(Config cfg)
+    {
+        lock (Lock)
+        {
+            Cfg = cfg with { MaxLevel = Cfg.MaxLevel };
+            Audit = new AuditLog(cfg.AuditPath);
+            Baseline = new BaselineStore(cfg.BaselineDir);
+        }
+    }
 
     /// <summary>New settings from the settings page (M.Configure is done by the caller); the matrix depth stays.</summary>
     public void ApplySettings(Config cfg)

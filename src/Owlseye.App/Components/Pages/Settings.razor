@@ -54,10 +54,14 @@
   </section>
 
   <section>
-    <h2>Files</h2>
-    <label>Log file <input type="text" @bind="audit" placeholder="@V.AuditPath"></label>
-    <label>Desired-state folder <input type="text" @bind="baseline" placeholder="@(V.BaselineDir ?? "memory only (demo)")"></label>
-    <p class="muted small">Empty = the defaults shown. For several admins put both on the admin share. These two apply at the next start.</p>
+    <h2>State folder</h2>
+    <label>Folder for the desired state and the log
+      <input type="text" @bind="state" placeholder="@V.StateDir"></label>
+    <p class="muted small">Now: log <span class="mono">@V.AuditPath</span>, desired state
+      <span class="mono">@(V.BaselineDir ?? "in memory only (demo)")</span>.<br>
+      Empty = your profile. For several admins use one folder on an admin share that only admins can write, e.g.
+      <span class="mono">\\fileserver\Owlseye$</span>. When you change it, owlseye moves its files there if the folder holds
+      none yet; if it already does (another admin uses it), that state is used and nothing is moved. Applies at once.</p>
   </section>
 
   <div class="applyform">
@@ -69,7 +73,7 @@
 @code {
   SettingsView? V;
   int scanDepth;
-  string write = "modify", fullControl = "", hidden = "", audit = "", baseline = "", reason = "";
+  string write = "modify", fullControl = "", hidden = "", state = "", reason = "";
   bool loaded;
 
   protected override void Refresh()
@@ -81,13 +85,12 @@
     write = V.Write;
     fullControl = string.Join("\n", V.FullControl);
     hidden = string.Join("\n", V.Hidden);
-    audit = V.Audit;
-    baseline = V.Baseline;
+    state = V.State;
   }
 
   Task Save()
   {
-    var input = new SettingsInput(scanDepth, write, hidden.Split('\n'), fullControl.Split('\n'), audit, baseline);
+    var input = new SettingsInput(scanDepth, write, hidden.Split('\n'), fullControl.Split('\n'), state);
     var r = reason;
     loaded = false; // show what was saved
     return Busy(() => S.SaveSettings(input, r));

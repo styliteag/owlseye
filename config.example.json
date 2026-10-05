@@ -2,7 +2,7 @@
   "provider": "windows",
   "share": "\\\\fs01\\Data",
   "max_level": 3,
-  "audit": "\\\\fs01\\Owlseye$\\audit.jsonl",
+  "state": "\\\\fs01\\Owlseye$",
   "write": "modify",
   "hidden": ["CORP\\backup"],
   "full_control": ["SYSTEM", "Domain Admins"]

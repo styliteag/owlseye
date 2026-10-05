@@ -59,8 +59,8 @@ tools/screenshots.mjs    regenerates docs/screenshots from the demo data (node t
 
 The Python/Electron proof of concept this was ported from is not part of this repository.
 
-Data stays compatible with the PoC: `settings.json`, `desired-<share>.json` and `audit-<provider>.jsonl` in
-`%LOCALAPPDATA%\owlseye` (or the paths in config.json). The browser profile of the window lives in
+Data stays compatible with the PoC: `settings.json` in `%LOCALAPPDATA%\owlseye`; `desired-<share>.json` and
+`audit-<provider>.jsonl` in the state folder, by default `%LOCALAPPDATA%\owlseye` too (Settings, config.json `state`). The browser profile of the window lives in
 `%LOCALAPPDATA%\owlseye\WebView2`, unexpected errors go to `%LOCALAPPDATA%\owlseye\error.log`.
 
 ## Running
@@ -115,7 +115,8 @@ owlseye always works with UNC. `max_level` (default 3) is the default matrix dep
 `"hidden": ["CORP\\backup"]`. `full_control` lists the accounts that must have full control on the root and on folders
 with broken inheritance (default `["SYSTEM", "Administrators"]`; also `Domain Admins` in any language, SIDs or names).
 
-All of these except provider and share can be changed on the **Settings** page; every change is logged. It saves to the
+`state` is the folder for the desired state and the log (default `%LOCALAPPDATA%\owlseye`; `audit` and `baseline` can
+still name other places). All of these except provider and share can be changed on the **Settings** page; every change is logged. It saves to the
 config.json in use if it can be written, otherwise to `%LOCALAPPDATA%\owlseye\config.json`, which owlseye reads at the
 next start before a config.json next to the exe (order: `--config`, then that file, then the one next to the exe).
 
@@ -204,7 +205,7 @@ the subtree. Required: `WRITE_DAC` on the managed folders, create subfolders dow
 ## Desired/actual comparison
 
 owlseye remembers as desired state all cells (group × folder, all scanned levels) and which folders have broken
-inheritance. One file per share in the admin's AppData folder: `%LOCALAPPDATA%\owlseye\desired-<share>.json`
+inheritance. One file per share in the state folder (by default the admin's `%LOCALAPPDATA%\owlseye`): `desired-<share>.json`
 (`\\fs01\Data` → `desired-fs01_data.json`). Written under file lock; every apply carries the changed
 folders forward. Whatever someone changed outside owlseye (Explorer, icacls, script) appears under "Desired state":
 
@@ -217,7 +218,9 @@ The top of the page shows the location and age of the desired-state file; "Delet
 broken one), after which the current state counts as desired. Group memberships are not part of the desired state
 (AD maintains them). On the very first start owlseye adopts the actual state (log entry `baseline_init`); a desired-state
 file from the earlier AGDLP model counts as absent. A broken file disables the comparison; owlseye does not overwrite
-it. Several admins: `"baseline": "\\\\fs01\\Owlseye$"` in config.json.
+it. Several admins: one state folder on an admin share that only admins can write (Settings, or
+`"state": "\\\\fs01\\Owlseye$"` in config.json); changing it on the Settings page moves desired state and log there
+if the folder holds none yet, or takes over what another admin keeps there.
 
 ## Status
 

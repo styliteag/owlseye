@@ -62,7 +62,7 @@ public sealed class SettingsTests : TestBase, IDisposable
         var (st, s) = Client(file);
         var v = s.SettingsPage();
         Assert.Equal((file, file, true), (v.File, v.SaveTo, v.CanSave));
-        var r = s.SaveSettings(new SettingsInput(4, "modify", ["DEMO\\G-IT", " "], ["SYSTEM", "Domain Admins"], "", ""), "T-9");
+        var r = s.SaveSettings(new SettingsInput(4, "modify", ["DEMO\\G-IT", " "], ["SYSTEM", "Domain Admins"], ""), "T-9");
         Assert.False(r.Error, r.Message);
         var json = JsonNode.Parse(File.ReadAllText(file))!.AsObject();
         Assert.Equal(("kept", 4L), (json.Str("dl_ou"), json.Long("scan_depth"))); // other keys stay
@@ -72,17 +72,17 @@ public sealed class SettingsTests : TestBase, IDisposable
         var entry = st.Audit.Entries().First(e => e.Str("kind") == "settings");
         Assert.Equal("T-9", entry.Str("reason"));
         Assert.Equal(20L, entry.Obj("changes")!["scan_depth"]!.Long("before"));
-        Assert.Equal("Nothing changed.", s.SaveSettings(new SettingsInput(4, "modify", ["DEMO\\G-IT"], ["SYSTEM", "Domain Admins"], "", ""), "").Message);
+        Assert.Equal("Nothing changed.", s.SaveSettings(new SettingsInput(4, "modify", ["DEMO\\G-IT"], ["SYSTEM", "Domain Admins"], ""), "").Message);
     }
 
     [Fact]
     public void SavingWaitsForPendingChangesAndChecksValues()
     {
         var (_, s) = Client();
-        Assert.Contains("0 (whole tree) to 100", s.SaveSettings(new SettingsInput(-1, "modify", [], [], "", ""), "").Message);
+        Assert.Contains("0 (whole tree) to 100", s.SaveSettings(new SettingsInput(-1, "modify", [], [], ""), "").Message);
         s.SetCell(Demo.Gsid("G-HR"), "HR", "R");
         Assert.False(s.SettingsPage().CanSave);
-        Assert.True(s.SaveSettings(new SettingsInput(4, "modify", [], [], "", ""), "").Error);
+        Assert.True(s.SaveSettings(new SettingsInput(4, "modify", [], [], ""), "").Error);
     }
 
     [Fact]
@@ -90,10 +90,55 @@ public sealed class SettingsTests : TestBase, IDisposable
     {
         var (st, s) = Client();
         Assert.Equal(Launch.PersonalConfig, s.SettingsPage().SaveTo);
-        s.SaveSettings(new SettingsInput(5, "no-delete", [], [], "", ""), "");
+        s.SaveSettings(new SettingsInput(5, "no-delete", [], [], ""), "");
         Assert.True(File.Exists(Launch.PersonalConfig));
         Assert.Equal(Launch.PersonalConfig, st.Cfg.File);
         Assert.Equal(M.WriteNoDelete, M.Write);
+    }
+
+    /// <summary>A sim share with its desired state and log in the data folder (the default state folder).</summary>
+    (State St, Session S) SimClient()
+    {
+        var sim = SimSeed.Seed(Path.Combine(Tmp, "sim"));
+        var cfg = new Config { Provider = "sim", SimDir = sim };
+        M.Configure(cfg.Write, cfg.Hidden, cfg.FullControl);
+        var st = new State(cfg, new SimProvider(sim));
+        st.Load();
+        Assert.True(st.Ready, st.LoadError);
+        return (st, new Session(st));
+    }
+
+    [Fact]
+    public void ChangingTheStateFolderMovesDesiredStateAndLogIfItIsEmpty()
+    {
+        var (st, s) = SimClient();
+        var oldDesired = Directory.GetFiles(AppData, "desired-*.json").Single();
+        var oldLog = st.Audit.Path;
+        Assert.True(File.Exists(oldLog));
+        var team = Path.Combine(Tmp, "team");
+        var r = s.SaveSettings(new SettingsInput(20, "modify", [], [], team), "to the admin share");
+        Assert.False(r.Error, r.Message);
+        Assert.Contains("Moved 2 files", r.Message);
+        Assert.False(File.Exists(oldDesired) || File.Exists(oldLog)); // moved, not copied
+        Assert.True(File.Exists(Path.Combine(team, Path.GetFileName(oldDesired))));
+        Assert.Equal(Path.Combine(team, "audit-sim.jsonl"), st.Audit.Path);
+        Assert.Contains(st.Audit.Entries(), e => e.Str("kind") == "baseline_init"); // the old log went along
+        Assert.Contains(st.Audit.Entries(), e => e.Str("kind") == "settings" && e.Str("reason") == "to the admin share");
+        Assert.Empty(st.Drift); // the moved desired state is used
+    }
+
+    [Fact]
+    public void AStateFolderInUseIsTakenAsItIs()
+    {
+        var (st, s) = SimClient();
+        var oldDesired = Directory.GetFiles(AppData, "desired-*.json").Single();
+        var team = Path.Combine(Tmp, "team");
+        Directory.CreateDirectory(team);
+        File.WriteAllText(Path.Combine(team, "audit-sim.jsonl"), ""); // another admin's log is already there
+        var r = s.SaveSettings(new SettingsInput(20, "modify", [], [], team), "");
+        Assert.Contains("already held owlseye state", r.Message);
+        Assert.True(File.Exists(oldDesired)); // nothing moved
+        Assert.Equal(Path.Combine(team, "audit-sim.jsonl"), st.Audit.Path);
     }
 
     [Fact]

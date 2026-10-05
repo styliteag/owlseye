@@ -24,7 +24,8 @@ public sealed record Config
     public string Share { get; init; } = ""; // UNC or drive letter; for local a local folder
     public int MaxLevel { get; init; } = 3; // default matrix depth (changeable in the UI, remembered per admin)
     public int ScanDepth { get; init; } = 20; // deepest level read; 0 = whole tree
-    public string Audit { get; init; } = ""; // path to audit.jsonl; empty = local
+    public string State { get; init; } = ""; // folder for the desired state and the log; empty = the data folder
+    public string Audit { get; init; } = ""; // path to audit.jsonl; empty = in the state folder
     public string SimDir { get; init; } = ""; // provider=sim only; empty = local
     public string Baseline { get; init; } = ""; // folder for desired-<share>.json; empty = AppData (demo: memory only)
     public string Write { get; init; } = "modify"; // what W means: "modify" (with delete) or "no-delete"
@@ -34,11 +35,14 @@ public sealed record Config
     /// <summary>The config.json this configuration was read from; null if none.</summary>
     public string? File { get; init; }
 
-    public string? BaselineDir => Baseline != "" ? Baseline : Provider == "demo" ? null : Paths.DataDir();
+    /// <summary>Where the desired state and the log go unless audit/baseline name other places.</summary>
+    public string StateDir => State != "" ? State : Paths.DataDir();
+
+    public string? BaselineDir => Baseline != "" ? Baseline : Provider == "demo" ? null : StateDir;
 
     public string SimPath => SimDir != "" ? SimDir : Path.Combine(Paths.DataDir(), "sim");
 
-    public string AuditPath => Audit != "" ? Audit : Path.Combine(Paths.DataDir(), $"audit-{Provider}.jsonl");
+    public string AuditPath => Audit != "" ? Audit : Path.Combine(StateDir, $"audit-{Provider}.jsonl");
 
     /// <summary>provider: from the command line, wins over the file. defaultProvider: if neither names one.</summary>
     public static Config Load(string? path, string? provider = null, string? defaultProvider = null)
@@ -51,6 +55,7 @@ public sealed record Config
             Share = raw.Str("share") ?? c.Share,
             MaxLevel = (int?)raw.Long("max_level") ?? c.MaxLevel,
             ScanDepth = (int?)raw.Long("scan_depth") ?? c.ScanDepth,
+            State = raw.Str("state") ?? c.State,
             Audit = raw.Str("audit") ?? c.Audit,
             SimDir = raw.Str("sim_dir") ?? c.SimDir,
             Baseline = raw.Str("baseline") ?? c.Baseline,
@@ -73,6 +78,7 @@ public sealed record Config
         raw["write"] = c.Write;
         raw["hidden"] = new JsonArray(c.Hidden.Select(h => (JsonNode)h!).ToArray());
         raw["full_control"] = new JsonArray(c.FullControl.Select(h => (JsonNode)h!).ToArray());
+        raw["state"] = c.State;
         raw["audit"] = c.Audit;
         raw["baseline"] = c.Baseline;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
