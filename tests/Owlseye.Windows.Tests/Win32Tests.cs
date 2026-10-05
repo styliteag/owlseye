@@ -152,11 +152,11 @@ public sealed class Win32Tests : IDisposable
     {
         var (_, s) = Client();
         Directory.CreateDirectory(Path.Combine(share, "C", "Existing"));
-        s.SetCreatorOwner("C", "W");
+        s.SetOwnerEntry(M.CreatorOwner, "C", "W");
         var o = Apply(s);
         Assert.False(o.Error, o.Message);
         Assert.Contains(Fs().ReadDacl("C").Aces, a => a.Sid == M.CreatorOwner && a.Mask == M.Modify && a.Flags == M.CreatorOwnerFlags);
-        Assert.Equal("W", s.FolderPanel("C").CreatorOwner);
+        Assert.Equal("W", s.FolderPanel("C").OwnerEntries.Single(e => e.Sid == M.CreatorOwner).Value);
         // Windows passes it down: the owner of what exists gets it, and so does whoever creates something new (the owner
         // is the test account, or the Administrators group when the tests run elevated)
         Directory.CreateDirectory(Path.Combine(share, "C", "Mine"));
@@ -165,6 +165,19 @@ public sealed class Win32Tests : IDisposable
             var owner = new DirectoryInfo(Path.Combine(share, "C", name)).GetAccessControl().GetOwner(typeof(SecurityIdentifier))!.Value;
             Assert.Contains(Fs().ReadDacl($@"C\{name}").Aces, a => a.Sid == owner && (a.Mask & M.Modify) == M.Modify && (a.Flags & M.InheritedAce) != 0);
         }
+    }
+
+    [Fact]
+    public void OwnerRightsAreWrittenForThisFolderSubfoldersAndFiles()
+    {
+        var (_, s) = Client();
+        s.SetOwnerEntry(M.OwnerRights, "C", "V");
+        var o = Apply(s);
+        Assert.False(o.Error, o.Message);
+        Assert.Contains(Fs().ReadDacl("C").Aces, a => a.Sid == M.OwnerRights && a.Mask == (M.ReadControl | M.Synchronize) && a.Flags == M.OiCi);
+        Directory.CreateDirectory(Path.Combine(share, "C", "Mine"));
+        Assert.Contains(Fs().ReadDacl(@"C\Mine").Aces, a => a.Sid == M.OwnerRights && (a.Flags & M.InheritedAce) != 0); // stays Owner Rights
+        Assert.Equal("V", s.FolderPanel("C").OwnerEntries.Single(e => e.Sid == M.OwnerRights).Value);
     }
 
     static void Junction(string link, string target)

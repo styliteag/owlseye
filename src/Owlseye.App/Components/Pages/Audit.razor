@@ -114,7 +114,7 @@
               }
               foreach (var c in (a.Arr("changes") ?? []).OfType<JsonObject>())
               {
-                <span class="@(c.Str("after") is not null ? "gain" : "loss")">@ShortName(c.Str("name") ?? "")</span><text> on </text><span class="mono">@path</span><text>: @Labels.Short(c.Str("before")) → @Labels.Short(c.Str("after"))</text>@if (c.Bool("auto") == true) {<span class="muted"> (auto)</span>}<br>
+                <span class="@(c.Str("after") is not null ? "gain" : "loss")">@ShortName(c.Str("name") ?? "")</span><text> on </text><span class="mono">@path</span><text>: @Labels.Value(c.Str("sid"), c.Str("before")) → @Labels.Value(c.Str("sid"), c.Str("after"))</text>@if (c.Bool("auto") == true) {<span class="muted"> (auto)</span>}<br>
               }
             }
             else

@@ -159,35 +159,39 @@ public sealed partial class Session(State st)
                 grants,
                 St.Findings.Where(x => M.Lower(x.Path) == M.Lower(path)).ToList(),
                 HiddenEntries(f),
-                St.Pending.TryGetValue((M.CreatorOwner, path), out var co) ? co : Rights.CreatorOwnerOf(f),
-                Rights.CreatorOwnerOf(f, inherited: true),
-                St.Pending.ContainsKey((M.CreatorOwner, path)),
+                [.. new[] { M.CreatorOwner, M.OwnerRights }.Select(sid => new OwnerEntryView(sid,
+                    St.Pending.TryGetValue((sid, path), out var v) ? v : Rights.OwnerEntryOf(f, sid),
+                    Rights.OwnerEntryOf(f, sid, inherited: true),
+                    St.Pending.ContainsKey((sid, path))))],
                 !f.OtherAces && !St.PendingClear.Contains(path) && St.Snap.Folders.ContainsKey(path));
         }
     }
 
     /// <summary>Entries of hidden accounts on the folder as the scan read them, per account and own/inherited; Creator
-    /// Owner has its own line in the panel.</summary>
+    /// Owner and Owner Rights have their own lines in the panel.</summary>
     static List<HiddenEntry> HiddenEntries(Folder f) =>
-        f.Aces.Where(a => a.Allow && a.Sid != M.CreatorOwner && M.IsHidden(a.Sid, a.Name))
+        f.Aces.Where(a => a.Allow && !M.IsOwnerSid(a.Sid) && M.IsHidden(a.Sid, a.Name))
             .GroupBy(a => (a.Sid, a.Inherited))
             .Select(g => new HiddenEntry(g.First().Name[(g.First().Name.LastIndexOf((char)92) + 1)..],
                 Rights.Classify(g.ToList()).Value ?? "*", g.Key.Inherited))
             .OrderBy(h => h.Inherited).ThenBy(h => M.Lower(h.Name), M.Ci).ToList();
 
-    /// <summary>Creator Owner on a folder: what whoever creates a file or folder below gets on it, "W" Modify, "F" full
-    /// control or null nothing. Pending like a cell, with preview, log and undo.</summary>
-    public void SetCreatorOwner(string path, string? value)
+    /// <summary>An owner entry on a folder (M.OwnerEntryValues): Creator Owner, what whoever creates a file or folder below
+    /// gets on it; Owner Rights, what the owner of each file and folder gets instead of reading and changing its
+    /// permissions. null = no entry. Pending like a cell, with preview, log and undo.</summary>
+    public void SetOwnerEntry(string sid, string path, string? value)
     {
         try
         {
             lock (St.Lock)
             {
+                if (!M.IsOwnerSid(sid)) throw new UserError("Only Creator Owner and Owner Rights are set this way");
                 if (!St.Snap.Folders.TryGetValue(path, out var f)) throw new UserError("Unknown folder");
-                if (value is not (null or "W" or "F")) throw new UserError("Creator Owner can have Modify (W), full control (F) or nothing");
-                var key = (M.CreatorOwner, path);
+                if (value is not null && !M.OwnerEntryValues(sid).Contains(value))
+                    throw new UserError($"Value must be empty or one of {string.Join(", ", M.OwnerEntryValues(sid))}");
+                var key = (sid, path);
                 var had = St.Pending.TryGetValue(key, out var prev);
-                if (value == Rights.CreatorOwnerOf(f)) St.Pending.Remove(key);
+                if (value == Rights.OwnerEntryOf(f, sid)) St.Pending.Remove(key);
                 else St.Pending[key] = value;
                 CheckPlan(() =>
                 {
@@ -360,7 +364,7 @@ public sealed partial class Session(State st)
         {
             if (M.ShowHidden == show) return;
             var principals = St.Principals();
-            if (!show && St.Pending.Keys.Any(k => k.Sid != M.CreatorOwner && M.IsHidden(k.Sid, principals.GetValueOrDefault(k.Sid)?.Name)))
+            if (!show && St.Pending.Keys.Any(k => !M.IsOwnerSid(k.Sid) && M.IsHidden(k.Sid, principals.GetValueOrDefault(k.Sid)?.Name)))
                 throw new UserError("Apply or discard the pending changes of hidden accounts first");
             M.ShowHidden = show;
             Settings.Save(new JsonObject { ["show_hidden"] = show });
@@ -610,9 +614,9 @@ public sealed partial class Session(State st)
                 if (!St.Snap.Folders.TryGetValue(o.Path, out var f)) continue;
                 foreach (var c in o.Changes)
                 {
-                    var now = c.Sid == M.CreatorOwner ? Rights.CreatorOwnerOf(f) : St.Cells.GetValueOrDefault((c.Sid, o.Path))?.Direct;
+                    var now = M.IsOwnerSid(c.Sid) ? Rights.OwnerEntryOf(f, c.Sid) : St.Cells.GetValueOrDefault((c.Sid, o.Path))?.Direct;
                     if (now != c.Before) St.Pending[(c.Sid, o.Path)] = c.Before;
-                    if (c.Sid != M.CreatorOwner && !St.Snap.Principals.ContainsKey(c.Sid)) St.Extra[c.Sid] = Resolved(c.Sid, c.Name);
+                    if (!M.IsOwnerSid(c.Sid) && !St.Snap.Principals.ContainsKey(c.Sid)) St.Extra[c.Sid] = Resolved(c.Sid, c.Name);
                 }
                 if (f.Protected != o.ProtectedBefore && St.CanToggleInheritance(f)) St.PendingFolders[o.Path] = o.ProtectedBefore;
             }

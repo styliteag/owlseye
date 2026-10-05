@@ -44,11 +44,11 @@ else
     </p>
     <p class="muted small">They inherit from their parent folder. Creating a folder cannot be undone automatically.</p>
   }
-  @if (plan.AclOps.SelectMany(o => o.Changes).Any(c => c.Sid == M.CreatorOwner))
+  @if (plan.AclOps.SelectMany(o => o.Changes).Any(c => M.IsOwnerSid(c.Sid)))
   {
-    <p class="flash"><b>Creator Owner changes.</b> Windows passes them down to the files and subfolders that exist already: there
-      the owner of each gets the new right (or loses the old one), and whoever creates something new gets it as well. owlseye
-      does not read file owners, so these users are not listed below.</p>
+    <p class="flash"><b>Creator Owner or Owner Rights change.</b> Windows passes this down to the files and subfolders that exist
+      already: there the owner of each gets the new right (or loses the old one), and so does whoever creates something new.
+      owlseye does not read file owners, so these users are not listed below.</p>
   }
   @if (V.HiddenLosses is { Count: > 0 } losses)
   {
@@ -83,7 +83,7 @@ else
       foreach (var c in o.Changes)
       {
         <tr><td class="mono">@Root(o.Path)</td><td>@ShortName(c.Name)</td>
-          <td>@Labels.Short(c.Before)</td><td class="@(c.After is not null ? "gain" : "loss")">@Labels.Short(c.After)</td>
+          <td>@Labels.Value(c.Sid, c.Before)</td><td class="@(c.After is not null ? "gain" : "loss")">@Labels.Value(c.Sid, c.After)</td>
           <td>@if (c.Auto) {<span class="sev low">automatic R|</span>}</td></tr>
       }
       var added = Planner.AddedFullControl(o, V.Required ?? []);

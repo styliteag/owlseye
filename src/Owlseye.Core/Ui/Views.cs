@@ -38,6 +38,18 @@ public static class Labels
 
     public static string Short(string? v) => v ?? "–";
 
+    /// <summary>A value in a change: cell values as they are, owner entries in words.</summary>
+    public static string Value(string? sid, string? v) => sid is not null && M.IsOwnerSid(sid) ? OwnerEntryText(sid, v) : Short(v);
+
+    public static string OwnerEntryText(string sid, string? v) => (sid, v) switch
+    {
+        (_, null) => "nothing",
+        (M.CreatorOwner, "F") => "full control",
+        (_, "W") => "Modify",
+        (M.OwnerRights, "V") => "no personal rights",
+        _ => "special rights",
+    };
+
     /// <summary>ACL entries in Windows terms, e.g. "Modify (this folder, subfolders and files)".</summary>
     public static string Describe(IEnumerable<Ace> aces) =>
         string.Join("; ", aces.Select(a => $"{(a.Allow ? "" : "Deny: ")}{RightsName(a.Mask)} ({Scope(a.Flags)})"));
@@ -162,13 +174,14 @@ public sealed record Grant(string Name, string Right, string? Source);
 /// <summary>An entry of a hidden account on a folder (SYSTEM, Domain Admins, …), shown in the folder panel.</summary>
 public sealed record HiddenEntry(string Name, string Right, bool Inherited);
 
-/// <param name="CreatorOwner">what Creator Owner gets below this folder from its own entries, pending change included
-/// (F, W, * or null)</param>
-/// <param name="CreatorOwnerInherited">the same from inherited entries</param>
+/// <summary>Creator Owner or Owner Rights on a folder (Rights.OwnerEntryOf).</summary>
+/// <param name="Value">from the folder's own entries, pending change included</param>
+/// <param name="Inherited">from inherited entries</param>
+public sealed record OwnerEntryView(string Sid, string? Value, string? Inherited, bool Pending);
+
 public sealed record FolderPanel(Folder F, string Share, bool CanAdd, IReadOnlyList<string> NewHere, bool IsNew, bool Protected,
     bool Pending, bool CanToggle, bool Clearing, bool CanClear, IReadOnlyList<Grant> Grants, IReadOnlyList<Finding> Findings,
-    IReadOnlyList<HiddenEntry> Hidden, string? CreatorOwner = null, string? CreatorOwnerInherited = null,
-    bool CreatorOwnerPending = false, bool CanSetCreatorOwner = false);
+    IReadOnlyList<HiddenEntry> Hidden, IReadOnlyList<OwnerEntryView> OwnerEntries, bool CanSetOwnerEntries);
 
 public sealed record GroupsPanel(string Gq, IReadOnlyList<Principal> Hits, IReadOnlySet<string> Shown, bool HiddenHint);
 

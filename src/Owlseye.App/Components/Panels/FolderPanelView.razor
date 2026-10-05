@@ -87,31 +87,36 @@ else if (f.Level > 0)
   </table>
   <p class="muted small">Not matrix columns; "Hidden accounts" above the matrix shows them.</p>
 }
-@if (!Model.IsNew && (Model.CanSetCreatorOwner || Model.CreatorOwner is not null || Model.CreatorOwnerInherited is not null))
+@foreach (var e in Model.IsNew ? [] : Model.OwnerEntries.Where(e => Model.CanSetOwnerEntries || e.Value is not null || e.Inherited is not null))
 {
-  <h4>Creator Owner</h4>
-  <p class="small">Whoever creates a file or folder in here gets on it:
-    <b>@CoText(Model.CreatorOwner)</b>@(Model.CreatorOwnerPending ? " (pending)" : "")@if (Model.CreatorOwnerInherited is { } inh)
+  var co = e.Sid == M.CreatorOwner;
+  var entry = e;
+  <h4>@(co ? "Creator Owner" : "Owner Rights")</h4>
+  <p class="small">@(co ? "Whoever creates a file or folder in here gets on it:" : "The owner of each file and folder in here gets:")
+    <b>@Text(e.Sid, e.Value)</b>@(e.Pending ? " (pending)" : "")@if (e.Inherited is { } inh)
     {
-      <text>; inherited: </text><b>@CoText(inh)</b>
+      <text>; inherited: </text><b>@Text(e.Sid, inh)</b>
     }</p>
-  @if (Model.CreatorOwnerInherited is not null)
+  @if (e.Inherited is not null)
   {
     <p class="muted small">@(f.Level == 0
       ? "The inherited part comes from above the share (often the drive); owlseye does not write there, change it in Explorer."
       : "The inherited part comes from a parent folder: change it there.")</p>
   }
-  @if (Model.CanSetCreatorOwner)
+  @if (Model.CanSetOwnerEntries)
   {
     <div class="choices">
-      @foreach (var (v, label) in new (string?, string)[] { (null, "Nothing"), ("W", "Modify"), ("F", "Full control") })
+      @foreach (var (v, label) in co
+        ? new (string?, string)[] { (null, "Nothing"), ("W", "Modify"), ("F", "Full control") }
+        : new (string?, string)[] { (null, "Nothing"), ("V", "No personal rights"), ("W", "Modify") })
       {
         var value = v;
-        <button class="@(Model.CreatorOwner == value ? "primary" : "")" @onclick="() => OnCreatorOwner.InvokeAsync(value)">@label</button>
+        <button class="@(e.Value == value ? "primary" : "")" @onclick="() => OnOwnerEntry.InvokeAsync((entry.Sid, value))">@label</button>
       }
     </div>
-    <p class="muted small">Applies to everything below, also to what exists already: Windows gives each file and subfolder
-      owner the right on it. With full control, users can change permissions on what they own and lock others out.</p>
+    <p class="muted small">@(co
+      ? "Applies to everything below, also to what exists already: Windows gives the owner of each file and subfolder the right on it. These are personal rights outside the groups: the matrix does not show them, and they stay when someone leaves a group."
+      : "Without an entry, owners may always read and change the permissions of what they own (whoever creates something owns it). With an entry they get only that and cannot change permissions; their access comes from the groups. Applies to everything below.")</p>
   }
 }
 @if (Model.Findings.Count > 0)
@@ -139,16 +144,10 @@ else if (f.Level > 0)
   /// <summary>Adds the new folder; false if it was refused (the name stays in the field).</summary>
   [Parameter] public Func<string, bool>? TryNewFolder { get; set; }
   [Parameter] public EventCallback<string> OnCancelNew { get; set; }
-  /// <summary>Creator Owner: null nothing, "W" Modify, "F" full control.</summary>
-  [Parameter] public EventCallback<string?> OnCreatorOwner { get; set; }
+  /// <summary>An owner entry: (Creator Owner or Owner Rights, a value of M.OwnerEntryValues or null).</summary>
+  [Parameter] public EventCallback<(string Sid, string? Value)> OnOwnerEntry { get; set; }
 
-  static string CoText(string? v) => v switch
-  {
-    null => "nothing of its own",
-    "F" => "full control",
-    "W" => "Modify",
-    _ => "special rights",
-  };
+  static string Text(string sid, string? v) => v is null ? "nothing of its own" : Labels.OwnerEntryText(sid, v);
 
   string name = "";
   string? forPath;

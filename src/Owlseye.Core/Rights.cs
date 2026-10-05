@@ -171,15 +171,20 @@ public static class Rights
         aces.Where(a => (a.Flags & M.InheritOnly) == 0 && (a.Flags & M.OiCi) == M.OiCi)
             .Aggregate(0u, (m, a) => m | a.Mask) is var mask && (mask & M.Full) == M.Full;
 
-    /// <summary>What Creator Owner gets on files and folders created below this folder, from its own entries (or the
-    /// inherited ones): F full control, W Modify, * something else, null nothing.</summary>
-    public static string? CreatorOwnerOf(Folder f, bool inherited = false)
+    /// <summary>What an owner entry gives, from the folder's own entries (or the inherited ones): Creator Owner F full
+    /// control or W Modify; Owner Rights V (owners only read the permissions) or W Modify; * something else; null
+    /// nothing (then owners may always read and change the permissions of what they own).</summary>
+    public static string? OwnerEntryOf(Folder f, string sid, bool inherited = false)
     {
-        var aces = f.Aces.Where(a => a.Sid == M.CreatorOwner && a.Allow && a.Inherited == inherited && (a.Flags & M.OiCi) != 0).ToList();
+        var aces = f.Aces.Where(a => a.Sid == sid && a.Allow && a.Inherited == inherited && (a.Flags & M.OiCi) != 0).ToList();
         if (aces.Count == 0) return null;
         var mask = aces.Aggregate(0u, (m, a) => m | M.MapGeneric(a.Mask));
-        return (mask & M.Full) == M.Full ? "F" : (mask & M.Modify) == M.Modify ? "W" : "*";
+        if (sid == M.CreatorOwner) return (mask & M.Full) == M.Full ? "F" : (mask & M.Modify) == M.Modify ? "W" : "*";
+        if ((mask & (M.WriteDac | M.WriteOwner)) != 0) return "*"; // owners may change permissions after all
+        return (mask & M.Modify) == M.Modify ? "W" : (mask & ~(M.ReadControl | M.Synchronize)) == 0 ? "V" : "*";
     }
+
+    public static string? CreatorOwnerOf(Folder f, bool inherited = false) => OwnerEntryOf(f, M.CreatorOwner, inherited);
 
     /// <summary>Does the account have full control here through these entries (own or inherited)?</summary>
     public static bool HasFullControl(IEnumerable<Ace> aces, string sid) =>
@@ -444,7 +449,7 @@ public static class Rights
             if (f.Protected && f.Level > maxLevel) o.Add(new("medium", path, $"Inheritance broken below level {maxLevel}"));
             // own entries; on the root also what it inherits from above the share (the drive often has it)
             if (CreatorOwnerOf(f) == "F" || (f.Level == 0 && !f.Protected && CreatorOwnerOf(f, inherited: true) == "F"))
-                o.Add(new("medium", path, "Creator Owner has full control: users can change permissions on what they create or own here"));
+                o.Add(new("medium", path, "Creator Owner has full control: whoever creates something here gets personal full control of it, outside the groups and the matrix, and keeps it after leaving them"));
             if (f.Protected || f.Level == 0) // the root may inherit it from above (the drive), a protected folder cannot
             {
                 var missing = required.Where(x => !HasFullControl(f.Aces, x.Sid)).Select(x => x.Short).ToList();

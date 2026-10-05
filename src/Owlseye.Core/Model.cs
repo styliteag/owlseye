@@ -35,6 +35,7 @@ public static class M
     public const uint Modify = WriteNoDelete | Delete; // Windows "Modify": read, execute, write and delete
     public const uint Full = 0x1F01FF;
     public const uint Delete = 0x10000, DeleteChild = 0x40, WriteDac = 0x40000, WriteOwner = 0x80000;
+    public const uint ReadControl = 0x20000, Synchronize = 0x100000;
 
     /// <summary>The mask of W: Modify (default, as Windows and most shares use it) or write without delete
     /// (config "write": "no-delete"). Set once at start by <see cref="Configure"/>.</summary>
@@ -183,8 +184,21 @@ public static class M
     /// <summary>Creator Owner entries owlseye writes: subfolders and files only (whoever creates them gets the right).</summary>
     public const int CreatorOwnerFlags = ObjectInherit | ContainerInherit | InheritOnly;
 
-    /// <summary>Name of Creator Owner in plans and the log.</summary>
-    public const string CreatorOwnerName = "Creator Owner (new files and folders)";
+    /// <summary>Creator Owner and Owner Rights stand for whoever creates or owns a file or folder: no columns, set in the
+    /// folder panel (owner entries).</summary>
+    public static bool IsOwnerSid(string sid) => sid is CreatorOwner or OwnerRights;
+
+    /// <summary>Values the folder panel offers: Creator Owner W (Modify) or F (full control), for subfolders and files;
+    /// Owner Rights V (owners only read the permissions) or W (Modify), for this folder, subfolders and files.</summary>
+    public static IReadOnlyList<string> OwnerEntryValues(string sid) => sid == CreatorOwner ? ["W", "F"] : ["V", "W"];
+
+    public static uint OwnerEntryMask(string value) => value switch { "F" => Full, "W" => Modify, _ => ReadControl | Synchronize };
+
+    public static int OwnerEntryFlags(string sid) => sid == CreatorOwner ? CreatorOwnerFlags : OiCi;
+
+    /// <summary>Name of an owner entry in plans and the log.</summary>
+    public static string OwnerEntryName(string sid) =>
+        sid == CreatorOwner ? "Creator Owner (new files and folders)" : "Owner Rights (owners of files and folders)";
 
     /// <summary>Longest name owlseye accepts for a new folder.</summary>
     public const int MaxFolderName = 200;

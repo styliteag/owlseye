@@ -111,7 +111,8 @@ own account: no service account, no stored password.
 - On the root and on folders with broken inheritance the full-control accounts (by default SYSTEM and Administrators)
   keep full control (F-P9).
 - The panel lists the hidden accounts on the folder and sets Creator Owner (what whoever creates a file or folder there
-  gets): nothing, Modify or full control; full control is a finding (F-I3, F-I4, F-F1).
+  gets: nothing, Modify or full control; full control is a finding) and Owner Rights ("no personal rights" or Modify
+  instead of the owner's right to change permissions) (F-I3, F-I4, F-F1).
 
 ### 2.4 Create subfolders
 

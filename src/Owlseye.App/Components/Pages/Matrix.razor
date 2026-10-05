@@ -96,7 +96,7 @@
         <CellPanelView Model="cellPanel" OnSetRight="SetFromPanel" OnInheritance="InheritanceFromCell" />
         break;
       case "folder" when folderPanel is not null:
-        <FolderPanelView Model="folderPanel" OnInheritance="InheritanceFromFolder" OnClear="ClearFolder" TryNewFolder="NewFolder" OnCancelNew="CancelNew" OnCreatorOwner="CreatorOwner" />
+        <FolderPanelView Model="folderPanel" OnInheritance="InheritanceFromFolder" OnClear="ClearFolder" TryNewFolder="NewFolder" OnCancelNew="CancelNew" OnOwnerEntry="OwnerEntry" />
         break;
       case "groups" when groupsPanel is not null:
         <GroupsPanelView Model="groupsPanel" OnSearch="SearchGroups" OnAdd="AddColumn" />
@@ -232,7 +232,7 @@
 
   void ClearFolder() => Act(() => S.ClearFolder(panelPath));
 
-  void CreatorOwner(string? value) => Act(() => S.SetCreatorOwner(panelPath, value));
+  void OwnerEntry((string Sid, string? Value) e) => Act(() => S.SetOwnerEntry(e.Sid, panelPath, e.Value));
 
   /// <summary>true when the folder is pending; on a refusal the panel keeps the typed name and shows why.</summary>
   bool NewFolder(string name)

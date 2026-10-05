@@ -58,13 +58,14 @@ public static class Acl
         return rest;
     }
 
-    /// <summary>Creator Owner on this folder: "W" Modify or "F" full control for whoever creates a file or folder
-    /// below, or nothing (null). Replaces its own Creator Owner entries.</summary>
-    public static List<Ace> SetCreatorOwner(IEnumerable<Ace> explicitAces, string? value)
+    /// <summary>An owner entry (Creator Owner, Owner Rights) on this folder as one entry with a value of
+    /// M.OwnerEntryValues, or none (null). Replaces the folder's own entries of that account.</summary>
+    public static List<Ace> SetOwnerEntry(IEnumerable<Ace> explicitAces, string sid, string? value)
     {
-        var rest = explicitAces.Where(a => a.Sid != M.CreatorOwner).ToList();
+        var rest = explicitAces.Where(a => a.Sid != sid).ToList();
         if (value is not null)
-            rest.Add(new Ace(M.CreatorOwner, @"CREATOR OWNER", "wellknown", value == "F" ? M.Full : M.Modify, Flags: M.CreatorOwnerFlags));
+            rest.Add(new Ace(sid, sid == M.CreatorOwner ? "CREATOR OWNER" : "OWNER RIGHTS", "wellknown", M.OwnerEntryMask(value),
+                Flags: M.OwnerEntryFlags(sid)));
         return rest;
     }
 

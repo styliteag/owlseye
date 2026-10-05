@@ -44,11 +44,13 @@ public sealed class Plan
 
 public static class Planner
 {
-    /// <summary>Snapshot with cells set; SYSTEM/Administrators on changed protected folders. creatorOwner: path -> what
-    /// Creator Owner gets there (Acl.SetCreatorOwner).</summary>
+    /// <summary>Snapshot with cells set; SYSTEM/Administrators on changed protected folders. owners: (Creator Owner or
+    /// Owner Rights, path) -> the owner entry there (Acl.SetOwnerEntry).</summary>
     public static Snapshot WithCells(Snapshot work, IEnumerable<KeyValuePair<(string Sid, string Path), string?>> values,
-        IReadOnlySet<string> touched, IReadOnlyDictionary<string, string?>? creatorOwner = null)
+        IReadOnlySet<string> touched, IReadOnlyDictionary<(string Sid, string Path), string?>? owners = null)
     {
+        var ownersByPath = (owners ?? new Dictionary<(string Sid, string Path), string?>())
+            .GroupBy(kv => kv.Key.Path).ToDictionary(g => g.Key, g => g.ToList());
         var byPath = new Dictionary<string, List<(string Sid, string? V)>>();
         foreach (var ((sid, path), v) in values)
         {
@@ -57,13 +59,13 @@ public static class Planner
         }
         var folders = new Dictionary<string, Folder>(work.Folders);
         var required = Rights.RequiredFullControl(work);
-        foreach (var path in byPath.Keys.Union(touched).Union(creatorOwner?.Keys ?? []))
+        foreach (var path in byPath.Keys.Union(touched).Union(ownersByPath.Keys))
         {
             var f = folders[path];
             IEnumerable<Ace> ex = f.Explicit;
             foreach (var (sid, v) in byPath.GetValueOrDefault(path) ?? [])
                 ex = Acl.SetCell(ex, work.Principals[sid], v);
-            if (creatorOwner is not null && creatorOwner.TryGetValue(path, out var co)) ex = Acl.SetCreatorOwner(ex, co);
+            foreach (var ((osid, _), ov) in ownersByPath.GetValueOrDefault(path) ?? []) ex = Acl.SetOwnerEntry(ex, osid, ov);
             if (f.Protected || f.Level == 0) ex = Acl.EnsureAdmins(ex, required, f.Aces.Where(a => a.Inherited));
             folders[path] = f with { Aces = [.. Acl.Canonical(ex), .. f.Aces.Where(a => a.Inherited)] };
         }
@@ -192,10 +194,11 @@ public static class Planner
         var required = Rights.RequiredFullControl(work);
         foreach (var ((sid, path), v) in changes)
         {
-            if (sid is M.OwnerRights) throw new PlanError("Owner Rights is not set in owlseye");
-            if (sid is M.CreatorOwner) // not a column: set in the folder panel, entries for subfolders and files only
+            if (M.IsOwnerSid(sid)) // Creator Owner, Owner Rights: no columns, set in the folder panel
             {
-                if (v is not (null or "W" or "F")) throw new PlanError("Creator Owner can have Modify (W), full control (F) or nothing");
+                if (v is not null && !M.OwnerEntryValues(sid).Contains(v))
+                    throw new PlanError(sid == M.CreatorOwner ? "Creator Owner can have Modify (W), full control (F) or nothing"
+                        : "Owner Rights can have no personal rights (V), Modify (W) or nothing");
                 if (!work.Folders.TryGetValue(path, out var cf)) throw new PlanError($"Unknown folder {Msg.Quote(path)}");
                 if (cf.OtherAces) throw new PlanError($"{path} has ACL entries of other types (e.g. conditional); owlseye does not rewrite it");
                 continue;
@@ -218,19 +221,19 @@ public static class Planner
                 throw new PlanError($"{path} has ACL entries of other types (e.g. conditional); owlseye does not rewrite it");
         }
 
-        var creatorOwner = changes.Where(kv => kv.Key.Sid == M.CreatorOwner && Rights.CreatorOwnerOf(work.Folders[kv.Key.Path]) != kv.Value)
-            .ToDictionary(kv => kv.Key.Path, kv => kv.Value);
-        changes = changes.Where(kv => kv.Key.Sid != M.CreatorOwner).ToDictionary();
+        var owners = changes.Where(kv => M.IsOwnerSid(kv.Key.Sid) && Rights.OwnerEntryOf(work.Folders[kv.Key.Path], kv.Key.Sid) != kv.Value)
+            .ToDictionary();
+        changes = changes.Where(kv => !M.IsOwnerSid(kv.Key.Sid)).ToDictionary();
         var before = Rights.ExplicitCells(work);
 
         bool Differs((string, string) k, string? v) => // same value on special entry: normalize
             before.TryGetValue(k, out var e) ? e.Value != v || !e.Standard : v is not null;
 
         var want = changes.Where(kv => Differs(kv.Key, kv.Value)).ToDictionary();
-        var auto = Traverse(before, WithCells(work, want, touched, creatorOwner), want, cache);
+        var auto = Traverse(before, WithCells(work, want, touched, owners), want, cache);
         var merged = new Dictionary<(string Sid, string Path), string?>(want);
         foreach (var (k, v) in auto) merged[k] = v;
-        var final = WithCells(work, merged, touched, creatorOwner);
+        var final = WithCells(work, merged, touched, owners);
         if (clear.Count > 0) // what is still explicit after removing the cells (Deny, SYSTEM etc.) is dropped too
         {
             var fs = new Dictionary<string, Folder>(final.Folders);
@@ -240,7 +243,7 @@ public static class Planner
 
         var old = Rights.ExplicitCells(snap);
         var newCells = Rights.ExplicitCells(final);
-        var paths = want.Keys.Select(k => k.Path).Union(auto.Keys.Select(k => k.Path)).Union(touched).Union(creatorOwner.Keys)
+        var paths = want.Keys.Select(k => k.Path).Union(auto.Keys.Select(k => k.Path)).Union(touched).Union(owners.Keys.Select(k => k.Path))
             .OrderBy(M.LevelOf).ThenBy(M.Lower, M.Ci).ToList();
         var ops = new List<AclOp>();
         foreach (var path in paths)
@@ -268,9 +271,12 @@ public static class Planner
                     ch.Add(new Change(sid, name, path, v0?.Value, v1?.Value, auto.ContainsKey((sid, path))));
                 }
             }
-            var co0 = f0 is not null ? Rights.CreatorOwnerOf(f0) : null;
-            var co1 = Rights.CreatorOwnerOf(f1);
-            if (co0 != co1) ch.Add(new Change(M.CreatorOwner, M.CreatorOwnerName, path, co0, co1));
+            foreach (var osid in new[] { M.CreatorOwner, M.OwnerRights })
+            {
+                var o0 = f0 is not null ? Rights.OwnerEntryOf(f0, osid) : null;
+                var o1 = Rights.OwnerEntryOf(f1, osid);
+                if (o0 != o1) ch.Add(new Change(osid, M.OwnerEntryName(osid), path, o0, o1));
+            }
             ops.Add(new AclOp(path, prot0, f1.Protected, b, a, ch, f0 is null, clear.Contains(path)));
         }
         var cellsAfter = Rights.Matrix(final);
@@ -323,7 +329,7 @@ public static class Planner
         const uint shown = M.Delete | M.DeleteChild | M.WriteDac | M.WriteOwner;
         var o = new List<HiddenLoss>();
         foreach (var op in plan.AclOps.Where(op => !op.NewFolder))
-            foreach (var c in op.Changes.Where(c => c.After is not null && c.Sid != M.CreatorOwner))
+            foreach (var c in op.Changes.Where(c => c.After is not null && !M.IsOwnerSid(c.Sid)))
             {
                 var before = op.Before.Where(a => a.Sid == c.Sid && a.Allow).ToList();
                 var after = op.After.Where(a => a.Sid == c.Sid && a.Allow).ToList();
