@@ -202,7 +202,8 @@ through (the app itself runs fine there). The smoke test needs that port, which 
 
 ### Releasing
 
-A version tag publishes a release with the zip to download. Run the UI smoke test locally first, CI does not:
+A version tag publishes a release with the zip to download. First add a section `## [1.0.0] - <date>` to
+[CHANGELOG.md](CHANGELOG.md) with what changed for the admins, and run the UI smoke test locally (CI does not):
 
 ```powershell
 .\build-windows.ps1; node tests/e2e/smoke.mjs publish/owlseye.exe
@@ -212,7 +213,7 @@ git push origin v1.0.0
 
 `.github/workflows/release.yml` then runs the tests, builds with that version (`.\build-windows.ps1 -Version 1.0.0`,
 which also writes `dist\owlseye-1.0.0-win-x64.zip` and `dist\SHA256SUMS.txt`) and creates the GitHub release with
-both files and notes generated from the commits since the last tag. If a step fails, there is no release; delete the
+both files and that CHANGELOG section as its notes (without one, notes generated from the commits). If a step fails, there is no release; delete the
 tag (`git push origin :v1.0.0`), fix, tag again.
 
 ## Matrix

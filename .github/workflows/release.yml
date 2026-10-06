@@ -1,7 +1,8 @@
 name: release
 
 # A tag v1.2.3 (or v1.2.3-rc1, published as a pre-release) tests, builds and publishes a GitHub release with
-# owlseye-1.2.3-win-x64.zip (the publish folder) and SHA256SUMS.txt.
+# owlseye-1.2.3-win-x64.zip (the publish folder) and SHA256SUMS.txt; the notes are the section ## [1.2.3] of
+# CHANGELOG.md (generated from the commits if there is none).
 on:
   push:
     tags: ['v*']
@@ -31,5 +32,14 @@ jobs:
           $tag = $env:GITHUB_REF_NAME
           $extra = @()
           if ($tag.Contains('-')) { $extra += '--prerelease' }
-          gh release create $tag (Get-ChildItem dist).FullName --verify-tag --generate-notes --title "OwlsEye $tag" @extra
+          $version = [regex]::Escape($tag.Substring(1))
+          $section = [regex]::Match((Get-Content CHANGELOG.md -Raw), '(?ms)^## \[' + $version + '\][^\n]*\n(.*?)(?=^## \[|\z)')
+          if ($section.Success) {
+            $notes = Join-Path $env:RUNNER_TEMP 'notes.md'
+            Set-Content $notes $section.Groups[1].Value.Trim() -Encoding utf8
+            $extra += @('--notes-file', $notes)
+          } else {
+            $extra += '--generate-notes'
+          }
+          gh release create $tag (Get-ChildItem dist).FullName --verify-tag --title "OwlsEye $tag" @extra
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }

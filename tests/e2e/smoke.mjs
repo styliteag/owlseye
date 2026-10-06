@@ -82,6 +82,7 @@ let failed = false;
 try {
   await connect();
   await step('matrix shows the demo share', () => until(`document.querySelectorAll('#grid tbody tr').length > 10`, 'matrix rows'));
+  await step('the header shows the version', () => until(`/^\\d+\\.\\d+\\.\\d+/.test(document.querySelector('header .brand .version')?.innerText ?? '')`, 'version in the header'));
   await step('click on a cell opens its panel', async () => {
     await click(`#grid button.c[data-path='HR']`);
     await until(`document.querySelector('#panel h3')`, 'cell panel');

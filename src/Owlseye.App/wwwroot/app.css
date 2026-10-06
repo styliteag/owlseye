@@ -124,6 +124,7 @@ table.matrix td button.c:focus-visible { outline: 2px solid var(--accent); outli
 .c.W { background: var(--m); color: #fff; }
 .c.F { background: var(--f); color: #fff; }
 .c.W- { background: var(--m); color: #fff; background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(255,255,255,.28) 4px 6px); }
+.brand .version { font-weight: 400; font-size: 11px; color: var(--muted); margin-left: 2px; }
 .kept-icon { font-size: 11px; margin-left: 2px; cursor: help; }
 .warn-note { border-left: 3px solid var(--warn); padding-left: 8px; }
 .c.movable { position: relative; }
