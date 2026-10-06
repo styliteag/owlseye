@@ -113,7 +113,8 @@ with `config.json` (see `config.example.json`) on the admin share, passed with `
 `owlseye.exe`. Without it, owlseye uses the domain anyway and asks for the share. `share` may be UNC or a drive letter; internally
 owlseye always works with UNC. `max_level` (default 3) is the default matrix depth (changeable in the UI);
 `scan_depth` limits how deep owlseye reads (default 20; 0 = whole tree). `write` says what `W` means: `"modify"`
-(default, read, write and delete, as Windows and most shares use it) or `"no-delete"` (read and write without delete).
+(default, read, write and delete, as Windows and most shares use it), `"no-delete"` (read and write without delete) or
+`"keep-folder"` (Modify inside, the folder itself cannot be deleted, renamed or moved).
 `hidden` lists further accounts that are not shown and not touched, e.g. a backup group with full control everywhere:
 `"hidden": ["CORP\\backup"]`. `full_control` lists the accounts that must have full control on the root and on folders
 with broken inheritance (default `["SYSTEM", "Administrators"]`; also `Domain Admins` in any language, SIDs or names).
@@ -128,6 +129,8 @@ settings go into the state folder; where the state folder is goes into the confi
 otherwise into `%LOCALAPPDATA%\owlseye\config.json`, which owlseye reads at the next start before a config.json next to
 the exe (order: `--config`, then that file, then the one next to the exe). Changing the state folder to one that
 already holds owlseye state takes over its desired state, log and settings; an empty one gets them moved there.
+
+![Settings: scan depth, what W means, full-control and hidden accounts, state folder](docs/screenshots/settings.png)
 
 ### Installing
 

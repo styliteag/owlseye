@@ -152,7 +152,11 @@ try {
   console.log('saved report-print.png');
   await send('Emulation.setEmulatedMedia', { media: '' });
 
-  // 11 dark mode
+  // 11 settings: scan, rights, hidden accounts, state folder
+  await go('/settings', `!!document.querySelector('form.settings')`);
+  await shot('settings.png');
+
+  // 12 dark mode
   await go('/matrix', `document.querySelector('#grid')`);
   await shot('matrix-dark.png', 'dark');
 } catch (e) {
