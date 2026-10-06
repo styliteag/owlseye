@@ -26,7 +26,8 @@ public class Win32Fs : IFilesystem
         return new IOException($"{func}: {new Win32Exception(code).Message}", code);
     }
 
-    /// <summary>Drive letter -> UNC. UNC stays UNC.</summary>
+    /// <summary>Drive letter -> UNC. UNC stays UNC. A mapped network drive becomes its share; a folder on this
+    /// computer's own disk (the file server's E:\Shares\Data) its administrative share, \\HOST\E$\Shares\Data.</summary>
     public virtual string ToUnc(string path)
     {
         var p = path.TrimEnd('\\', '/');
@@ -38,14 +39,35 @@ public class Win32Fs : IFilesystem
         }
         if (Regex.IsMatch(p, "^[A-Za-z]:"))
         {
-            var unc = UniversalName(p + "\\") ?? throw new IOException(
+            if (UniversalName(p + "\\") is { } unc)
+            {
+                Share = unc.TrimEnd('\\');
+                return Share;
+            }
+            if (new DriveInfo(p[..1]).DriveType == DriveType.Fixed)
+            {
+                var admin = AdminShare(p, Environment.MachineName);
+                if (!Directory.Exists(admin))
+                    throw new IOException(
+                        $"{p} is a folder on this computer's own disk, not a share. owlseye opens it as {admin} (the "
+                        + "administrative share), which it cannot reach: the administrative share may be switched off. "
+                        + "Share the folder and open it by its UNC path.");
+                Share = admin;
+                return Share;
+            }
+            throw new IOException(
                 $"{p} is not a network drive in this session. Is owlseye running elevated? "
                 + "Then it cannot see normally mapped drives; start it without 'Run as administrator' "
                 + "or use the UNC path.");
-            Share = unc.TrimEnd('\\');
-            return Share;
         }
         throw new ArgumentException($"Neither UNC nor a drive letter: {path}");
+    }
+
+    /// <summary>A folder on a computer's own disk as its administrative share: E:\Shares\Data -> \\HOST\E$\Shares\Data.</summary>
+    public static string AdminShare(string localPath, string host)
+    {
+        var full = Path.GetFullPath(localPath.Length == 2 ? localPath + "\\" : localPath).TrimEnd('\\');
+        return $@"\\{host}\{char.ToUpperInvariant(full[0])}${full[2..]}";
     }
 
     static unsafe string? UniversalName(string local)

@@ -113,8 +113,9 @@ with `config.json` (see `config.example.json`) on the admin share, passed with `
 `owlseye.exe`. Without it, owlseye uses the domain anyway and asks for the share. `share` may be UNC or a mapped network
 drive; internally owlseye always works with UNC, so that the desired state and the log belong to the share, not to a
 drive letter that differs from one admin's computer to the next. A local folder on the file server (`E:\Shares\Data` on
-the server itself) is not a share: open it through the server's administrative share, `\\fileserver\E$\Shares\Data`
-(no share has to be created). `--local` is no way around this on a domain: it reads only the server's local user
+the server itself) is not a share: owlseye opens it through the server's administrative share,
+`\\fileserver\E$\Shares\Data`, by itself (no share has to be created; if the administrative share is switched off, it
+says so). `--local` is no way around this on a domain: it reads only the server's local user
 database, so domain groups would have no members. `max_level` (default 3) is the default matrix depth (changeable in the UI);
 `scan_depth` limits how deep owlseye reads (default 20; 0 = whole tree). `write` says what `W` means: `"modify"`
 (default, read, write and delete, as Windows and most shares use it), `"no-delete"` (read and write without delete) or

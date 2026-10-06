@@ -219,6 +219,21 @@ public sealed class Win32Tests : IDisposable
         }
     }
 
+    [Fact]
+    public void ALocalFolderIsOpenedThroughTheAdministrativeShare()
+    {
+        Assert.Equal(@"\\FS01\E$\Shares\Data", Win32Fs.AdminShare(@"e:\Shares\Data\", "FS01"));
+        Assert.Equal(@"\\FS01\E$", Win32Fs.AdminShare("E:", "FS01"));
+        try
+        {
+            Assert.Equal(Win32Fs.AdminShare(share, Environment.MachineName), new Win32Fs().ToUnc(share));
+        }
+        catch (IOException e) // where the administrative share cannot be reached (e.g. a local account without elevation)
+        {
+            Assert.Contains("administrative share", e.Message);
+        }
+    }
+
     static void Junction(string link, string target)
     {
         var p = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"") { CreateNoWindow = true, UseShellExecute = false })!;
@@ -510,7 +525,8 @@ public sealed class Win32Tests : IDisposable
     [Fact]
     public void DriveLetterThatIsNotANetworkDriveIsExplained()
     {
-        var e = Assert.Throws<IOException>(() => new Win32Fs().ToUnc(@"C:\"));
+        var free = "ZYXWVUTSRQPONMLKJIHG".First(c => !Directory.Exists($@"{c}:\")); // no drive at all (C: is a local disk)
+        var e = Assert.Throws<IOException>(() => new Win32Fs().ToUnc($@"{free}:\"));
         Assert.Contains("not a network drive", e.Message);
     }
 
