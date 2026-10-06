@@ -11,7 +11,7 @@ folders, and writes them as NTFS ACLs: with a preview of what changes for every 
 that reports changes made outside owlseye, findings and an access rights report for audits.
 
 - The version is shown next to "owlseye" in the header.
-- Release notes: this file, shown with each GitHub release.
+- Release notes in CHANGELOG.md, shown with each GitHub release.
 
 ## [0.9.29] - 2026-10-06
 
