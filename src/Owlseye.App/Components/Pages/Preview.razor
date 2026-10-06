@@ -33,6 +33,13 @@ else
       <div class="card"><b class="loss">@hl.Count</b>entries lose hidden rights</div>
     }
   </div>
+  @* at the top: the effect on users below can be thousands of rows long *@
+  <form class="applyform" @onsubmit="Apply">
+    <input type="text" @bind="reason" placeholder="Reason or ticket (goes into the log)">
+    <button type="submit" class="primary" disabled="@Ui.Busy">Apply</button>
+    <a href="/matrix">Back</a>
+  </form>
+  <p class="muted small">Before writing, owlseye reads every affected ACL again and stops if it was changed in the meantime. The changes and their effect on users are listed below.</p>
   @if (plan.CreateOps.Count > 0)
   {
     <h2>New folders</h2>
@@ -138,12 +145,8 @@ else
   {
     <p class="muted">No change for any user, for example because the right is already inherited.</p>
   }
-  <form class="applyform" @onsubmit="Apply">
-    <input type="text" @bind="reason" placeholder="Reason or ticket (goes into the log)">
-    <button type="submit" class="primary" disabled="@Ui.Busy">Apply</button>
-    <a href="/matrix">Back</a>
-  </form>
-  <p class="muted">Before writing, owlseye reads every affected ACL again and stops if it was changed in the meantime.</p>
+  <p class="applyform"><button class="primary" disabled="@Ui.Busy" @onclick="Apply">Apply</button>
+    <span class="muted small">with the reason entered at the top</span> <a href="/matrix">Back</a></p>
 }
 
 @code {
