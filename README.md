@@ -110,8 +110,12 @@ owlseye.exe --local E:\Share       # then "Restart as administrator" in the head
 
 Against a real domain: as a normal admin user, **not** "Run as administrator" (otherwise mapped drives are invisible),
 with `config.json` (see `config.example.json`) on the admin share, passed with `--config` or placed next to
-`owlseye.exe`. Without it, owlseye uses the domain anyway and asks for the share. `share` may be UNC or a drive letter; internally
-owlseye always works with UNC. `max_level` (default 3) is the default matrix depth (changeable in the UI);
+`owlseye.exe`. Without it, owlseye uses the domain anyway and asks for the share. `share` may be UNC or a mapped network
+drive; internally owlseye always works with UNC, so that the desired state and the log belong to the share, not to a
+drive letter that differs from one admin's computer to the next. A local folder on the file server (`E:\Shares\Data` on
+the server itself) is not a share: open it through the server's administrative share, `\\fileserver\E$\Shares\Data`
+(no share has to be created). `--local` is no way around this on a domain: it reads only the server's local user
+database, so domain groups would have no members. `max_level` (default 3) is the default matrix depth (changeable in the UI);
 `scan_depth` limits how deep owlseye reads (default 20; 0 = whole tree). `write` says what `W` means: `"modify"`
 (default, read, write and delete, as Windows and most shares use it), `"no-delete"` (read and write without delete) or
 `"keep-folder"` (Modify inside, the folder itself cannot be deleted, renamed or moved).
@@ -131,6 +135,33 @@ the exe (order: `--config`, then that file, then the one next to the exe). Chang
 already holds owlseye state takes over its desired state, log and settings; an empty one gets them moved there.
 
 ![Settings: scan depth, what W means, full-control and hidden accounts, state folder](docs/screenshots/settings.png)
+
+### Testing on a copy of a production share
+
+To try owlseye's changes on real rights without touching the share, copy its folder tree with all ACLs but without the
+files. On the file server, in an administrator PowerShell:
+
+```
+robocopy E:\Shares\Data E:\Shares\Data-test /E /XF * /COPY:DATSO /DCOPY:DAT /B /XJ /MT:16 /R:0 /W:0 /NP /NFL /LOG:E:\Shares\robocopy.log
+```
+
+`/XF *` leaves out every file; `/COPY:DATSO` takes the ACLs and owners along, `/B` (backup mode) reaches folders the
+administrators have no rights on, `/XJ` does not follow junctions. Check the log for errors. Explicit entries and broken
+inheritance are copied exactly; the copy's root inherits from its new parent folder, not from where the original is. Run
+it on a machine of the same domain, or the ACLs show unresolved SIDs.
+
+Then let owlseye use the copy with a state folder of its own, so the test does not end up in the real desired state and
+log, and with the production rules (`owlseye-settings.json` copied from the real state folder):
+
+```
+New-Item -ItemType Directory C:\owlseye-test\state
+Copy-Item \\fileserver\Owlseye$\owlseye-settings.json C:\owlseye-test\state\
+'{ "state": "C:\\owlseye-test\\state", "share": "\\\\fileserver\\E$\\Shares\\Data-test" }' | Set-Content C:\owlseye-test\config.json -Encoding utf8
+owlseye.exe --config C:\owlseye-test\config.json
+```
+
+Compare the findings pages of both shares (folders checked, moved folders, findings) before trying changes. Afterwards
+delete `E:\Shares\Data-test` and `C:\owlseye-test`.
 
 ### Installing
 
