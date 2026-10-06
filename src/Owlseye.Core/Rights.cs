@@ -192,10 +192,12 @@ public static class Rights
     public static bool IsForm(IReadOnlyList<Ace> aces, IReadOnlyList<(uint Mask, int Flags)> form) =>
         aces.Select(a => (a.Mask, a.Flags & ~M.InheritedAce)).Order().SequenceEqual(form.Order());
 
-    /// <summary>A folder users cannot delete, rename or move: some account's W on it is in the kept form (write without
-    /// delete on the folder, Modify below, M.StandardAces). owlseye then writes every W and W| there in that form.</summary>
+    /// <summary>A folder users cannot delete, rename or move: some account's W or W| on it is in the kept form (W: write
+    /// without delete on the folder and Modify below; W|: write without delete, M.StandardAces). owlseye then writes every
+    /// W and W| there in that form. (A folder with only W| has no W to tell it by.)</summary>
     public static bool Kept(Folder f) =>
-        f.Explicit.Where(a => a.Allow).GroupBy(a => a.Sid).Any(g => IsForm(g.ToList(), M.StandardAces("W", kept: true)));
+        f.Explicit.Where(a => a.Allow).GroupBy(a => a.Sid).Select(g => g.ToList())
+            .Any(aces => IsForm(aces, M.StandardAces("W", kept: true)) || IsForm(aces, M.StandardAces("W|", kept: true)));
 
     /// <summary>On a kept folder, the accounts whose W or W| is still the plain Modify entry: they can delete, rename or
     /// move the folder all the same.</summary>

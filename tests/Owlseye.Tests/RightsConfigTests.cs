@@ -209,6 +209,33 @@ public sealed class RightsSettingsTests : TestBase, IDisposable
     }
 
     [Fact]
+    public void AFolderWithOnlyWListCanBeKeptAndLetGo()
+    {
+        const string y2025 = Staff + @"\2025"; // no W of its own: the W| alone has to tell that it is kept
+        var st = new State(new Config { Provider = "demo", Audit = Path.Combine(Tmp, "log.jsonl") }, new DemoProvider());
+        st.Load();
+        var s = new Session(st);
+        var hr = Demo.Gsid("G-HR");
+        s.SetCell(hr, y2025, "W|");
+        Assert.False(s.Apply("", s.Preview().Phash).Error);
+        IEnumerable<(uint, int)> Mine() => st.Snap.Folders[y2025].Explicit.Where(a => a.Sid == hr).Select(a => (a.Mask, a.Flags));
+
+        s.SetKept(y2025, true);
+        var p = s.Preview();
+        Assert.Empty(p.HiddenLosses ?? []); // losing delete on the folder is the point, not a hidden loss
+        Assert.True(p.Plan!.AclOps.Single(o => o.Path == y2025).KeptAfter);
+        Assert.False(s.Apply("", p.Phash).Error);
+        Assert.True(s.FolderPanel(y2025).Kept);
+        Assert.Equal([(M.WriteNoDelete, M.ThisFolder)], Mine());
+        Assert.True(st.Cells[(hr, y2025)].Standard); // W|, not W|*
+
+        s.SetKept(y2025, false);
+        Assert.False(s.Apply("", s.Preview().Phash).Error);
+        Assert.False(s.FolderPanel(y2025).Kept);
+        Assert.Equal([(M.Modify, M.ThisFolder)], Mine());
+    }
+
+    [Fact]
     public void APlainWOnAKeptFolderIsMarkedAndAFinding()
     {
         var snap = new DemoProvider().Scan();
