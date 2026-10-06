@@ -8,8 +8,8 @@
 namespace Owlseye;
 
 /// <param name="Full">the entry is full control (value F, passed down like R and W)</param>
-/// <param name="Movable">with "write": "keep-folder", a W that is still the single Modify entry: users can delete,
-/// rename or move the folder (not a special entry, it just is not converted yet)</param>
+/// <param name="Movable">on a folder users cannot move (Rights.Kept), a W or W| that is still the plain Modify entry:
+/// through it they can delete, rename or move the folder all the same (not a special entry, it just is not converted)</param>
 public sealed record Explicit(string Value, bool Standard, bool Full = false, bool Movable = false);
 
 public sealed record Cell(string? Direct, string? Effective, string? Source, bool Standard = true, bool Full = false, bool Movable = false);
@@ -103,17 +103,19 @@ public static class Rights
         ["S-1-5-32-545"] = "BUILTIN\\Users",
     };
 
-    static readonly string[] Reach = ["R|", "R", "W|", "W", "F"]; // every right on a folder requires being able to reach it
+    static readonly string[] Reach = ["R|", "R", "W|", "W-", "W", "F"]; // every right on a folder requires being able to reach it
 
-    /// <summary>Explicit Allow ACEs of an account on a folder -> (cell value, exactly the standard entry?).</summary>
-    public static (string? Value, bool Standard) Classify(IReadOnlyList<Ace> aces)
+    /// <summary>Explicit Allow ACEs of an account on a folder -> (cell value, exactly the standard entry?). kept: the
+    /// folder is one users cannot move (Kept), where W and W| have their own entries (M.StandardAces).</summary>
+    public static (string? Value, bool Standard) Classify(IReadOnlyList<Ace> aces, bool kept = false)
     {
         if (aces.Count == 0) return (null, true);
         var inheritable = aces.Where(a => (a.Flags & M.OiCi) != 0).ToList();
         IReadOnlyList<Ace> pool = inheritable.Count > 0 ? inheritable : aces;
         var write = pool.Any(a => (a.Mask & WriteBits) != 0);
-        var value = IsFullControl(aces) ? "F" : inheritable.Count > 0 ? (write ? "W" : "R") : (write ? "W|" : "R|");
-        var std = M.StandardAces(value).Select(s => (s.Mask, s.Flags)).Order().ToList();
+        var delete = pool.Any(a => (M.MapGeneric(a.Mask) & M.Delete) != 0);
+        var value = IsFullControl(aces) ? "F" : inheritable.Count > 0 ? (write ? delete ? "W" : "W-" : "R") : (write ? "W|" : "R|");
+        var std = M.StandardAces(value, kept).Select(s => (s.Mask, s.Flags)).Order().ToList();
         return (value, aces.Select(a => (a.Mask, a.Flags & ~M.InheritedAce)).Order().SequenceEqual(std));
     }
 
@@ -187,15 +189,20 @@ public static class Rights
 
     public static string? CreatorOwnerOf(Folder f, bool inherited = false) => OwnerEntryOf(f, M.CreatorOwner, inherited);
 
-    /// <summary>The one entry W is everywhere but with "keep-folder": Modify on this folder, subfolders and files.</summary>
-    static bool IsPlainModify(IReadOnlyList<Ace> aces) =>
-        aces.Count == 1 && aces[0].Mask == M.Modify && (aces[0].Flags & ~M.InheritedAce) == M.OiCi;
+    public static bool IsForm(IReadOnlyList<Ace> aces, IReadOnlyList<(uint Mask, int Flags)> form) =>
+        aces.Select(a => (a.Mask, a.Flags & ~M.InheritedAce)).Order().SequenceEqual(form.Order());
 
-    /// <summary>Own W entries that are the single Modify entry (accounts the matrix shows): what "keep-folder" would
-    /// convert. Counted for the settings page, whatever "write" is now.</summary>
-    public static int PlainModifyEntries(Snapshot snap) =>
-        snap.Folders.Values.Sum(f => f.Explicit.Where(a => a.Allow && !M.Hides(a.Sid, a.Name)).GroupBy(a => a.Sid)
-            .Count(g => IsPlainModify(g.ToList())));
+    /// <summary>A folder users cannot delete, rename or move: some account's W on it is in the kept form (write without
+    /// delete on the folder, Modify below, M.StandardAces). owlseye then writes every W and W| there in that form.</summary>
+    public static bool Kept(Folder f) =>
+        f.Explicit.Where(a => a.Allow).GroupBy(a => a.Sid).Any(g => IsForm(g.ToList(), M.StandardAces("W", kept: true)));
+
+    /// <summary>On a kept folder, the accounts whose W or W| is still the plain Modify entry: they can delete, rename or
+    /// move the folder all the same.</summary>
+    public static List<Ace> StillMovable(Folder f) => !Kept(f) ? [] :
+        f.Explicit.Where(a => a.Allow).GroupBy(a => a.Sid).Where(g => IsPlain(g.ToList())).Select(g => g.First()).ToList();
+
+    static bool IsPlain(IReadOnlyList<Ace> aces) => IsForm(aces, [M.Standard["W"]]) || IsForm(aces, [M.Standard["W|"]]);
 
     /// <summary>Does the account have full control here through these entries (own or inherited)?</summary>
     public static bool HasFullControl(IEnumerable<Ace> aces, string sid) =>
@@ -212,11 +219,13 @@ public static class Rights
                     if (!by.TryGetValue((a.Sid, path), out var l)) by[(a.Sid, path)] = l = [];
                     l.Add(a);
                 }
+        var kept = snap.Folders.Values.Where(Kept).Select(f => f.Path).ToHashSet();
         var o = new Dictionary<(string, string), Explicit>();
         foreach (var (k, v) in by)
         {
-            var (value, standard) = Classify(v);
-            o[k] = new Explicit(value!, standard, IsFullControl(v), M.KeepFolder && value == "W" && !standard && IsPlainModify(v));
+            var onKept = kept.Contains(k.Item2);
+            var (value, standard) = Classify(v, onKept);
+            o[k] = new Explicit(value!, standard, IsFullControl(v), onKept && !standard && IsPlain(v));
         }
         return o;
     }
@@ -269,7 +278,7 @@ public static class Rights
             foreach (var (sid, e) in mine)
             {
                 var have = passing.TryGetValue(sid, out var p) ? p.V : null;
-                if (e.Value is "R" or "W" or "F" && M.Rank(e.Value) > M.Rank(have)) passing[sid] = (e.Value, f.Path);
+                if (e.Value is "R" or "W-" or "W" or "F" && M.Rank(e.Value) > M.Rank(have)) passing[sid] = (e.Value, f.Path);
             }
             passes[f.Path] = passing;
             foreach (var sid in incoming.Keys.Union(mine.Keys))
@@ -461,7 +470,7 @@ public static class Rights
         {
             if (!f.Protected || f.Level < 1) continue;
             foreach (var (sid, c) in byPath.GetValueOrDefault(f.Parent!) ?? [])
-                if (c.Effective is "R" or "W" or "F" && !cells.ContainsKey((sid, path)))
+                if (c.Effective is "R" or "W-" or "W" or "F" && !cells.ContainsKey((sid, path)))
                     o[(sid, path)] = (c.Effective, f.Parent!);
         }
         return o;
@@ -512,6 +521,9 @@ public static class Rights
             if (M.SuspiciousName(f.Name))
                 o.Add(new("medium", path, "Name has invisible, combining or mixed-script characters (lookalike?)"));
             if (f.Protected && f.Level > maxLevel) o.Add(new("medium", path, $"Inheritance broken below level {maxLevel}"));
+            if (StillMovable(f) is { Count: > 0 } movable)
+                o.Add(new("medium", path, $"{string.Join(", ", movable.Select(a => ShortOf(snap, a.Sid)))} can still delete, rename or move "
+                    + "this folder: their W is the plain Modify entry (folder panel: users cannot move this folder)"));
             if (stale.Contains(path))
                 o.Add(new("medium", path, "Inherited entries are not what the parent folder passes down (moved here?): re-apply inheritance in the folder panel"));
             // own entries; on the root also what it inherits from above the share (the drive often has it)

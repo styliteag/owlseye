@@ -21,12 +21,13 @@ User → security group (e.g. universal) → folder ACL. A group may appear on a
 | Cell | ACL entry | as in a typical Excel list |
 | --- | --- | --- |
 | `R` | Read, execute (`0x1200A9`), this folder + subfolders + files | `R` |
-| `W` | Modify (`0x1301BF`: read, execute, write and delete), this folder + subfolders + files; with `"write": "no-delete"` in config.json read + write without delete (`0x1201BF`); with `"write": "keep-folder"` two entries, write without delete on the folder itself and Modify on its subfolders and files, so users cannot delete, rename or move the folder | `W` |
+| `W` | Modify (`0x1301BF`: read, execute, write and delete), this folder + subfolders + files | `W` |
+| `W-` | Read and write without delete (`0x1201BF`), this folder + subfolders + files: users add and change, but delete nothing | |
 | `R\|` | Read this folder only (list, to reach subfolders) | `R\|` |
 | `W\|` | The same as `W`, this folder only | `W\|` |
 | `F` | Full control (`0x1F01FF`), this folder + subfolders + files: also change permissions and take ownership; for admin and service groups (a finding marks it) | |
 
-The masks live in one place (`src/Owlseye.Core/Model.cs`: `M.Read`, `M.Write`, `M.Standard`). Other entries (write without delete while W means Modify, several entries of one group, special rights) show as `*` (special entry), and the cell panel says in Windows terms what is there, e.g. "Modify + change permissions". A click replaces a special entry with the standard entry; if that removes rights the matrix does not show (delete, change permissions, take ownership), the preview lists them before anything is written.
+The masks live in one place (`src/Owlseye.Core/Model.cs`: `M.Read`, `M.Modify`, `M.Standard`). Other entries (several entries of one group, special rights) show as `*` (special entry), and the cell panel says in Windows terms what is there, e.g. "Modify + change permissions". A click replaces a special entry with the standard entry; if that removes rights the matrix does not show (delete, change permissions, take ownership), the preview lists them before anything is written.
 
 - **R| automatic:** When a group gets a right on a folder, owlseye sets `R|` on every parent folder up to the root that the group cannot otherwise enter. "Enter" means: an own (or inherited) entry there, or every member already gets in via another group (typically `G-AllUsers` with `R|` on the root). When the last right below goes away, this `R|` goes too. An `R|` set by hand stays. Missing `R|` is a finding.
 - **Inheritance** (`[-]` in the Excel list, `⛔` in the matrix): `R`/`W` pass into subfolders until one is protected; `R|`/`W|` do not. Toggle on any folder except the root. Breaking copies all inherited entries as own entries (nobody loses access), then you remove selectively. Restoring removes explicit copies of what the parent folder inherits. **Clear** resets a folder to the default like a new one: inheritance on, no own entries (deny and special entries go too), the automatically set `R|` above disappears with it.
@@ -35,7 +36,7 @@ The masks live in one place (`src/Owlseye.Core/Model.cs`: `M.Read`, `M.Write`, `
   - Creator Owner: nothing, Modify or full control, for subfolders and files only. These are personal rights outside the groups that stay when someone leaves a group; full control is a finding. For shares managed through groups, nothing is the usual choice.
   - Owner Rights: whoever creates something owns it, and an owner may always read and change its permissions. An Owner Rights entry replaces that: "no personal rights" (owners only read the permissions) or Modify. Then users cannot change the permissions of what they own and lock others out.
 - **Moved folders:** a folder moved within the volume (also by a user on the share) keeps the inherited entries of its old place; Windows does not apply the new parent's until it or a folder above is written. owlseye compares each folder's inherited entries with what its parent passes down: a moved folder is a finding, the matrix shows what Windows really applies there ("left over from a move"), and "Re-apply inheritance" in the folder panel writes it so Windows takes the parent's entries again (also below). Any write above a moved folder has the same effect, and the preview shows it. Moved folders carry `↯` in the matrix, and the Findings page always says how many it found, also when there are none.
-- **Folders users cannot move:** with `"write": "keep-folder"` (Settings, "Modify inside") a W is written so that users cannot delete, rename or move the folder it is set on. Switching writes nothing: the Settings page says how many existing W entries are the single Modify entry, the matrix marks them (corner mark, no finding each), and the Findings page converts them in one go with a preview.
+- **Folders users cannot move (📌):** in the folder panel, "Keep users from moving it" writes every W on that folder as write without delete on the folder itself and Modify on its subfolders and files (W| as write without delete), and so does every W set there later. Users then work with everything inside but cannot delete, rename or move the folder (a moved folder would take its rights along). The matrix shows 📌 on the folder; a W there that is still the plain Modify entry is marked and a finding, and keeping the folder again converts it. Folders below that inherit W can still be moved.
 - **What owlseye does not touch:** deny entries, entries of other accounts on a changed folder, ACLs with other ACE types (e.g. conditional), paths across junctions/symlinks.
 
 ## Structure
@@ -117,15 +118,14 @@ the server itself) is not a share: owlseye opens it through the server's adminis
 `\\fileserver\E$\Shares\Data`, by itself (no share has to be created; if the administrative share is switched off, it
 says so). `--local` is no way around this on a domain: it reads only the server's local user
 database, so domain groups would have no members. `max_level` (default 3) is the default matrix depth (changeable in the UI);
-`scan_depth` limits how deep owlseye reads (default 20; 0 = whole tree). `write` says what `W` means: `"modify"`
-(default, read, write and delete, as Windows and most shares use it), `"no-delete"` (read and write without delete) or
-`"keep-folder"` (Modify inside, the folder itself cannot be deleted, renamed or moved).
+`scan_depth` limits how deep owlseye reads (default 20; 0 = whole tree). (The `write` key of earlier versions is
+ignored: W- and folders users cannot move are set in the matrix.)
 `hidden` lists further accounts that are not shown and not touched, e.g. a backup group with full control everywhere:
 `"hidden": ["CORP\\backup"]`. `full_control` lists the accounts that must have full control on the root and on folders
 with broken inheritance (default `["SYSTEM", "Administrators"]`; also `Domain Admins` in any language, SIDs or names).
 
 `state` is the folder for the desired state, the log and the **shared settings** (default `%LOCALAPPDATA%\owlseye`;
-`audit` and `baseline` can still name other places). `scan_depth`, `write`, `hidden` and `full_control` are kept there
+`audit` and `baseline` can still name other places). `scan_depth`, `hidden` and `full_control` are kept there
 in `owlseye-settings.json` and win over the same keys in the local config.json: every admin who uses the state folder
 works by the same rules, and the local config.json only needs to say where the folder is.
 
@@ -135,7 +135,7 @@ otherwise into `%LOCALAPPDATA%\owlseye\config.json`, which owlseye reads at the 
 the exe (order: `--config`, then that file, then the one next to the exe). Changing the state folder to one that
 already holds owlseye state takes over its desired state, log and settings; an empty one gets them moved there.
 
-![Settings: scan depth, what W means, full-control and hidden accounts, state folder](docs/screenshots/settings.png)
+![Settings: scan depth, full-control and hidden accounts, state folder](docs/screenshots/settings.png)
 
 ### Testing on a copy of a production share
 

@@ -30,7 +30,8 @@ public sealed partial class Session(State st)
         if (c is { Direct: not null } && c.Source == path)
         {
             var tip = c.Movable
-                ? "Entry here: W, written before \"Modify inside\": users can still delete, rename or move this folder. Choose W to convert it"
+                ? $"Entry here: {Labels.Label(c.Direct)}, the plain Modify entry: users can still delete, rename or move this folder, which is "
+                    + "kept from moving. Choose the value again to convert it"
                 : $"Entry here: {Labels.Label(c.Direct)}" + (c.Standard ? "" : " (non-standard entry)");
             return new CellInfo(c.Direct, "direct", tip, path, c.Standard, Full: c.Full, Movable: c.Movable);
         }
@@ -111,7 +112,8 @@ public sealed partial class Session(State st)
                 flagged.Contains(M.Lower(f.Path)),
                 f.Path.Split('\\')[0],
                 St.PendingFolders.ContainsKey(f.Path),
-                moved.Contains(f.Path))).ToList();
+                moved.Contains(f.Path),
+                Rights.Kept(f))).ToList();
             return new MatrixView(cols, rows, usersIn, err, q, St.PendingCount, St.PendingNew.Keys.ToList(), St.Drift.Count,
                 St.Cfg.MaxLevel, St.Extra.Keys.ToHashSet());
         }
@@ -169,7 +171,13 @@ public sealed partial class Session(State st)
                     St.Pending.ContainsKey((sid, path))))],
                 !f.OtherAces && !St.PendingClear.Contains(path) && St.Snap.Folders.ContainsKey(path),
                 Rights.Stale(St.Snap).Contains(path),
-                St.PendingReinherit.Contains(path));
+                St.PendingReinherit.Contains(path),
+                Rights.Kept(f),
+                St.PendingKept.ContainsKey(path),
+                Rights.StillMovable(f).Select(a => principals.TryGetValue(a.Sid, out var p) ? p.Short : a.Name).ToList(),
+                !f.OtherAces && !St.PendingClear.Contains(path) && St.Snap.Folders.ContainsKey(path)
+                    && (f.Explicit.Any(a => a.Allow && !M.IsOwnerSid(a.Sid) && Rights.Classify(f.Explicit.Where(b => b.Sid == a.Sid && b.Allow).ToList()).Value is "W" or "W|")
+                        || St.PendingKept.ContainsKey(path)));
         }
     }
 
@@ -617,7 +625,10 @@ public sealed partial class Session(State st)
             Need(d.Arr("after"), "after").Select(AceOf).ToList(),
             changes,
             d.Bool("new_folder") ?? false,
-            d.Bool("cleared") ?? false);
+            d.Bool("cleared") ?? false,
+            d.Bool("reinherited") ?? false,
+            d.Bool("kept_before") ?? false,
+            d.Bool("kept_after") ?? false);
     }
 
     public Outcome Undo(string entryId)
@@ -645,6 +656,7 @@ public sealed partial class Session(State st)
                     if (now != c.Before) St.Pending[(c.Sid, o.Path)] = c.Before;
                     if (!M.IsOwnerSid(c.Sid) && !St.Snap.Principals.ContainsKey(c.Sid)) St.Extra[c.Sid] = Resolved(c.Sid, c.Name);
                 }
+                if (o.KeptBefore != o.KeptAfter && Rights.Kept(f) != o.KeptBefore) St.PendingKept[o.Path] = o.KeptBefore;
                 if (f.Protected != o.ProtectedBefore && St.CanToggleInheritance(f)) St.PendingFolders[o.Path] = o.ProtectedBefore;
             }
         }
@@ -849,27 +861,35 @@ public sealed partial class Session(State st)
     public FindingChecks FindingsChecks()
     {
         lock (St.Lock)
-            return new FindingChecks(St.Snap.Folders.Count, Rights.Stale(St.Snap).Count, M.KeepFolder, MovableW().Count);
+        {
+            var kept = St.Snap.Folders.Values.Where(Rights.Kept).ToList();
+            return new FindingChecks(St.Snap.Folders.Count, Rights.Stale(St.Snap).Count, kept.Count, kept.Count(f => Rights.StillMovable(f).Count > 0));
+        }
     }
 
-    List<(string Sid, string Path)> MovableW() =>
-        St.Cells.Where(kv => kv.Value.Movable && kv.Value.Source == kv.Key.Path).Select(kv => kv.Key).ToList();
-
-    /// <summary>With "keep-folder": every W still in the single-entry form becomes a pending W, which owlseye writes as
-    /// the two entries (write without delete on the folder, Modify below).</summary>
-    public Outcome ConvertMovableW()
+    /// <summary>Users cannot delete, rename or move the folder (true), or can again (false): every W and W| on it is
+    /// written in that form (Acl.SetKept), also W set there later. Again with the current state = take back.</summary>
+    public void SetKept(string path, bool kept)
     {
-        lock (St.Lock)
+        try
         {
-            var add = MovableW().Where(k => !St.Pending.ContainsKey(k)).ToList();
-            if (add.Count == 0) return new Outcome("/findings", "Every W already keeps its folder.");
-            foreach (var k in add) St.Pending[k] = "W";
-            CheckPlan(() =>
+            lock (St.Lock)
             {
-                foreach (var k in add) St.Pending.Remove(k);
-            });
+                if (!St.Snap.Folders.TryGetValue(path, out var f)) throw new UserError("Unknown folder");
+                var had = St.PendingKept.TryGetValue(path, out var prev);
+                // a kept folder whose W are not all converted yet can be kept again: that converts the rest
+                if (kept == Rights.Kept(f) && !(kept && Rights.StillMovable(f).Count > 0)) St.PendingKept.Remove(path);
+                else St.PendingKept[path] = kept;
+                CheckPlan(() =>
+                {
+                    if (had) St.PendingKept[path] = prev;
+                    else St.PendingKept.Remove(path);
+                });
+            }
+        }
+        finally
+        {
             St.NotifyChanged();
-            return new Outcome("/preview", $"{add.Count} W entr{(add.Count == 1 ? "y" : "ies")} to convert: check the preview, then apply.");
         }
     }
 

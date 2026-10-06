@@ -19,7 +19,7 @@ public class AclModelTests : TestBase
     [InlineData(M.Read, 0, "R|", true)]
     [InlineData(M.Modify, 0, "W|", true)]
     [InlineData(M.Full, M.OiCi, "F", true)] // full control
-    [InlineData(M.WriteNoDelete, M.OiCi, "W", false)] // write without delete: special unless "write": "no-delete"
+    [InlineData(M.WriteNoDelete, M.OiCi, "W-", true)] // write without delete: its own value
     [InlineData(0x100021u, 0, "R|", false)] // list/traverse only
     public void Classify(uint mask, int flags, string value, bool standard)
     {
@@ -29,7 +29,7 @@ public class AclModelTests : TestBase
     [Fact]
     public void TwoEntriesForOneGroupAreNonStandard()
     {
-        Ace[] aces = [new("S", "X\\G", "group", M.Read, Flags: 0), new("S", "X\\G", "group", M.Write, Flags: 0xB)];
+        Ace[] aces = [new("S", "X\\G", "group", M.Read, Flags: 0), new("S", "X\\G", "group", M.Modify, Flags: 0xB)];
         Assert.Equal(("W", false), Rights.Classify(aces));
     }
 

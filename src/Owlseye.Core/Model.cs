@@ -15,7 +15,7 @@ namespace Owlseye;
 
 public static class M
 {
-    public static readonly string[] Cells = ["R|", "R", "W|", "W", "F"];
+    public static readonly string[] Cells = ["R|", "R", "W|", "W-", "W", "F"];
 
     public static double Rank(string? v) => v switch
     {
@@ -23,6 +23,7 @@ public static class M
         "R|" => 0.5,
         "W|" => 0.75,
         "R" => 1,
+        "W-" => 1.5,
         "W" => 2,
         "F" => 3,
         _ => throw new ArgumentException($"Unknown right {v}"),
@@ -37,29 +38,26 @@ public static class M
     public const uint Delete = 0x10000, DeleteChild = 0x40, WriteDac = 0x40000, WriteOwner = 0x80000;
     public const uint ReadControl = 0x20000, Synchronize = 0x100000;
 
-    /// <summary>The mask of W: Modify (default, as Windows and most shares use it, also with "keep-folder") or write
-    /// without delete (config "write": "no-delete"). Set once at start by <see cref="Configure"/>.</summary>
-    public static uint Write { get; private set; } = Modify;
-
-    /// <summary>config "write": "keep-folder": W is Modify on subfolders and files but only write without delete on the
-    /// folder itself, so users cannot delete, rename or move the folder that has the W entry (W| likewise).</summary>
-    public static bool KeepFolder { get; private set; }
-
-    /// <summary>The ACEs (mask, flags) of a cell value: one, or two for W with "keep-folder".</summary>
-    public static IReadOnlyList<(uint Mask, int Flags)> StandardAces(string value) =>
-        KeepFolder && value == "W" ? [(WriteNoDelete, ThisFolder), (Modify, OiCi | InheritOnly)] : [Standard[value]];
-
-    /// <summary>The main entry of each cell value (for W with "keep-folder" the one for subfolders and files, see
-    /// StandardAces).</summary>
-    public static IReadOnlyDictionary<string, (uint Mask, int Flags)> Standard { get; private set; } = StandardFor(Modify, false);
-
-    static Dictionary<string, (uint Mask, int Flags)> StandardFor(uint write, bool keepFolder) => new()
+    /// <summary>The entry of each cell value. W- is write without delete; with it users can neither delete files nor
+    /// the folder.</summary>
+    public static readonly IReadOnlyDictionary<string, (uint Mask, int Flags)> Standard = new Dictionary<string, (uint Mask, int Flags)>
     {
         ["R|"] = (Read, ThisFolder),
         ["R"] = (Read, OiCi),
-        ["W|"] = (keepFolder ? WriteNoDelete : write, ThisFolder),
-        ["W"] = (write, OiCi),
+        ["W|"] = (Modify, ThisFolder),
+        ["W-"] = (WriteNoDelete, OiCi),
+        ["W"] = (Modify, OiCi),
         ["F"] = (Full, OiCi), // full control: also change permissions and take ownership
+    };
+
+    /// <summary>The ACEs (mask, flags) of a cell value on a folder users cannot delete, rename or move (Rights.Kept): W
+    /// is write without delete on the folder itself and Modify on its subfolders and files, W| write without delete.
+    /// Elsewhere, and for the other values, the one entry of Standard.</summary>
+    public static IReadOnlyList<(uint Mask, int Flags)> StandardAces(string value, bool kept = false) => (value, kept) switch
+    {
+        ("W", true) => [(WriteNoDelete, ThisFolder), (Modify, OiCi | InheritOnly)],
+        ("W|", true) => [(WriteNoDelete, ThisFolder)],
+        _ => [Standard[value]],
     };
 
     public const string System = "S-1-5-18", Admins = "S-1-5-32-544", CreatorOwner = "S-1-3-0", OwnerRights = "S-1-3-4";
@@ -74,21 +72,13 @@ public static class M
     /// Administrators, Domain Admins (resolved against the scan, see Rights.RequiredFullControl).</summary>
     public static IReadOnlyList<string> FullControl { get; private set; } = DefaultFullControl;
 
-    /// <summary>Applies config.json: what W means ("modify", "no-delete" or "keep-folder"), further accounts to hide like the
-    /// administrators (SIDs or names, "DOMAIN\name" or "name") and the accounts that must have full control. Called at
-    /// start before the provider scans, and when the settings are saved.</summary>
-    public static void Configure(string write, IEnumerable<string> hidden, IEnumerable<string>? fullControl = null)
+    /// <summary>Applies config.json: further accounts to hide like the administrators (SIDs or names, "DOMAIN\name" or
+    /// "name") and the accounts that must have full control. Called at start before the provider scans, and when the
+    /// settings are saved.</summary>
+    public static void Configure(IEnumerable<string> hidden, IEnumerable<string>? fullControl = null)
     {
         var fc = (fullControl ?? DefaultFullControl).Select(x => x.Trim()).Where(x => x != "").ToList();
         FullControl = fc.Count > 0 ? fc : DefaultFullControl;
-        Write = write switch
-        {
-            "modify" or "keep-folder" => Modify,
-            "no-delete" => WriteNoDelete,
-            _ => throw new ArgumentException($"config.json: \"write\" must be \"modify\", \"no-delete\" or \"keep-folder\", not \"{write}\""),
-        };
-        KeepFolder = write == "keep-folder";
-        Standard = StandardFor(Write, KeepFolder);
         hiddenAccounts = new HashSet<string>(hidden.Select(h => h.Trim()).Where(h => h != ""), StringComparer.OrdinalIgnoreCase);
     }
 

@@ -183,8 +183,8 @@ public sealed class AclAppTests : TestBase
         var page = s.CellPanel(G("G-HR"), "HR");
         Assert.Equal("direct", page.Info.Kind); // "Entry here"
         Assert.StartsWith("Entry here", page.Info.Tip);
-        Assert.Equal([null, "R|", "R", "W|", "W", "F"], page.Options);
-        string[] labels = ["No access", "R| List", "R Read", "W| Modify", "W Modify", "F Full control"];
+        Assert.Equal([null, "R|", "R", "W|", "W-", "W", "F"], page.Options);
+        string[] labels = ["No access", "R| List", "R Read", "W| Modify", "W- Write, no delete", "W Modify", "F Full control"];
         foreach (var (label, option) in labels.Zip(page.Options))
             Assert.StartsWith(label, Labels.Label(option)); // title="{label}…" on each choice
     }
@@ -220,7 +220,7 @@ public sealed class AclAppTests : TestBase
     {
         var p = new DemoProvider();
         var (prot, aces) = p.FolderAcl("HR");
-        p.SetFolderAcl("HR", prot, [.. aces.Select(a => a.Sid == G("G-HR") ? a with { Mask = M.WriteNoDelete } : a)]); // write, no delete
+        p.SetFolderAcl("HR", prot, [.. aces.Select(a => a.Sid == G("G-HR") ? a with { Mask = M.Modify | M.WriteDac } : a)]); // Modify + change permissions
         var (_, s) = Client(p);
         var hit = CellAt(s.Matrix(), G("G-HR"), "HR");
         Assert.Equal(("W odd", "W*"), hit.Display()); // class="c W odd" … >W*<

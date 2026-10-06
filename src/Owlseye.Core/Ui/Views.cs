@@ -21,6 +21,7 @@ public static class Labels
         "R|" => "R",
         "R" => "W",
         "W|" => "W",
+        "W-" => "W",
         "W" => null,
         _ => null,
     };
@@ -30,18 +31,15 @@ public static class Labels
         null => "No access",
         "R|" => "R| List (this folder only)",
         "R" => "R Read",
-        "W|" => M.Write == M.Modify && !M.KeepFolder ? "W| Modify (this folder only)" : "W| Write, no delete (this folder only)",
-        "W" => "W " + WriteText(),
+        "W|" => "W| Modify (this folder only)",
+        "W-" => "W- Write, no delete (read and write, but nothing can be deleted)",
+        "W" => "W Modify (read, write and delete)",
         "F" => "F Full control",
         _ => v,
     };
 
     public static string Short(string? v) => v ?? "–";
 
-    /// <summary>What W means with the setting "write".</summary>
-    public static string WriteText() =>
-        M.KeepFolder ? "Modify inside (the folder itself cannot be deleted, renamed or moved)"
-        : M.Write == M.Modify ? "Modify" : "Write, no delete";
 
     /// <summary>A value in a change: cell values as they are, owner entries in words.</summary>
     public static string Value(string? sid, string? v) => sid is not null && M.IsOwnerSid(sid) ? OwnerEntryText(sid, v) : Short(v);
@@ -139,7 +137,8 @@ public sealed record CellInfo(string? Value, string Kind, string Tip, string? So
 /// <summary>One folder row of the matrix. The cells are computed when first asked for: the UI draws only the rows in
 /// view, so on a large share most rows never need them.</summary>
 public sealed class MatrixRow(Folder folder, Func<IReadOnlyList<CellInfo>> cells, int contentSig, bool isProtected, bool pendingFolder,
-    bool isNew, string deep, bool hasChildren, bool flagged, string top, bool pendingInheritance = false, bool moved = false)
+    bool isNew, string deep, bool hasChildren, bool flagged, string top, bool pendingInheritance = false, bool moved = false,
+    bool kept = false)
 {
     readonly Lazy<IReadOnlyList<CellInfo>> lazyCells = new(cells);
 
@@ -157,10 +156,13 @@ public sealed class MatrixRow(Folder folder, Func<IReadOnlyList<CellInfo>> cells
     /// <summary>Moved here (Rights.Stale): its inherited entries are not what its parent passes down.</summary>
     public bool Moved { get; } = moved;
 
+    /// <summary>Users cannot delete, rename or move this folder (Rights.Kept), pending changes included.</summary>
+    public bool Kept { get; } = kept;
+
     /// <summary>Changes whenever anything shown in the row changes (contentSig covers its cells, pending changes and
     /// blocked rights): the UI redraws only rows whose signature changed.</summary>
     public int Sig { get; } = HashCode.Combine(HashCode.Combine(folder.Path, folder.Name, isProtected, pendingFolder, isNew, deep, hasChildren, flagged),
-        pendingInheritance, contentSig, moved);
+        pendingInheritance, contentSig, moved, kept);
 }
 
 public sealed record MatrixView(
@@ -181,8 +183,9 @@ public sealed record CellPanel(Principal P, Folder F, CellInfo Info, IReadOnlyLi
 public sealed record Grant(string Name, string Right, string? Source);
 
 /// <summary>What owlseye checked, shown above the findings so that an empty list means something.</summary>
-/// <param name="MovableW">W entries users can still delete, rename or move (only counted with "keep-folder")</param>
-public sealed record FindingChecks(int Folders, int Moved, bool KeepFolder, int MovableW);
+/// <param name="Kept">folders users cannot delete, rename or move (Rights.Kept)</param>
+/// <param name="StillMovable">of these, the ones some W entry still lets users move (Rights.StillMovable)</param>
+public sealed record FindingChecks(int Folders, int Moved, int Kept, int StillMovable);
 
 /// <summary>An entry of a hidden account on a folder (SYSTEM, Domain Admins, …), shown in the folder panel.</summary>
 public sealed record HiddenEntry(string Name, string Right, bool Inherited);
@@ -195,7 +198,8 @@ public sealed record OwnerEntryView(string Sid, string? Value, string? Inherited
 public sealed record FolderPanel(Folder F, string Share, bool CanAdd, IReadOnlyList<string> NewHere, bool IsNew, bool Protected,
     bool Pending, bool CanToggle, bool Clearing, bool CanClear, IReadOnlyList<Grant> Grants, IReadOnlyList<Finding> Findings,
     IReadOnlyList<HiddenEntry> Hidden, IReadOnlyList<OwnerEntryView> OwnerEntries, bool CanSetOwnerEntries,
-    bool Stale = false, bool Reinheriting = false);
+    bool Stale = false, bool Reinheriting = false, bool Kept = false, bool KeptPending = false,
+    IReadOnlyList<string>? StillMovable = null, bool CanKeep = false);
 
 public sealed record GroupsPanel(string Gq, IReadOnlyList<Principal> Hits, IReadOnlySet<string> Shown, bool HiddenHint);
 

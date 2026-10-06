@@ -103,6 +103,10 @@
             if (a.ContainsKey("protected_before"))
             {
               var path = Root(a.Str("path") ?? "");
+              if (a.Bool("kept_before") is { } kb && a.Bool("kept_after") is { } ka && kb != ka)
+              {
+                <span>@(ka ? "📌 kept from moving" : "may be moved again")</span> <span class="mono">@path</span><br>
+              }
               if (a.Bool("reinherited") == true)
               {
                 <span class="gain">↻ inheritance re-applied</span> <span class="mono">@path</span><br>

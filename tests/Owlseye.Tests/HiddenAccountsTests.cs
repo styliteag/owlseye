@@ -12,14 +12,14 @@ public sealed class HiddenAccountsTests : TestBase, IDisposable
     void IDisposable.Dispose()
     {
         M.ShowHidden = false;
-        M.Configure("modify", []);
+        M.Configure([]);
     }
 
     const string OPS = "Operations";
 
     (State St, Session S) Client(params string[] hidden)
     {
-        M.Configure("modify", hidden);
+        M.Configure(hidden);
         var st = new State(new Config { Provider = "demo", Audit = Path.Combine(Tmp, "log.jsonl") }, new DemoProvider());
         st.Load();
         Assert.True(st.Ready, st.LoadError);

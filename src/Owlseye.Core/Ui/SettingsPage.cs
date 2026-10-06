@@ -8,13 +8,11 @@ namespace Owlseye.Ui;
 /// <param name="SaveTo">where saving goes: that file if it can be written, else the admin's own one</param>
 /// <param name="Required">the full_control accounts as found in this share's ACLs</param>
 /// <param name="State">the state folder as set ("" = the data folder)</param>
-public sealed record SettingsView(string? File, string SaveTo, bool CanSave, string? Blocked, int ScanDepth, string Write,
+public sealed record SettingsView(string? File, string SaveTo, bool CanSave, string? Blocked, int ScanDepth,
     IReadOnlyList<string> Hidden, IReadOnlyList<string> FullControl, IReadOnlyList<Principal> Required, string State,
-    string StateDir, string AuditPath, string? BaselineDir, string Provider, string SharedFile = "", bool SharedExists = false,
-    int PlainModify = 0);
+    string StateDir, string AuditPath, string? BaselineDir, string Provider, string SharedFile = "", bool SharedExists = false);
 
-public sealed record SettingsInput(int ScanDepth, string Write, IReadOnlyList<string> Hidden, IReadOnlyList<string> FullControl,
-    string State);
+public sealed record SettingsInput(int ScanDepth, IReadOnlyList<string> Hidden, IReadOnlyList<string> FullControl, string State);
 
 /// <param name="Moved">files moved into the new state folder</param>
 /// <param name="Existing">the new folder already held owlseye state (another admin uses it): nothing was moved</param>
@@ -54,9 +52,9 @@ public sealed partial class Session
             var c = St.Cfg;
             var (target, blocked) = SaveTarget();
             var reason = blocked ?? (St.PendingCount > 0 ? "Apply or discard the pending changes first: saving works the rights out anew." : null);
-            return new SettingsView(c.File, target, reason is null, reason, c.ScanDepth, c.Write, c.Hidden, c.FullControl,
+            return new SettingsView(c.File, target, reason is null, reason, c.ScanDepth, c.Hidden, c.FullControl,
                 St.Ready ? Rights.RequiredFullControl(St.Snap) : [], c.State, c.StateDir, c.AuditPath, c.BaselineDir, c.Provider,
-                c.SharedFile, File.Exists(c.SharedFile), St.Ready ? Rights.PlainModifyEntries(St.Snap) : 0);
+                c.SharedFile, File.Exists(c.SharedFile));
         }
     }
 
@@ -116,13 +114,10 @@ public sealed partial class Session
             if (blocked is not null) return new Outcome("/settings", blocked, true);
             if (St.PendingCount > 0) return new Outcome("/settings", "Apply or discard the pending changes first: saving works the rights out anew.", true);
             if (input.ScanDepth is < 0 or > 100) return new Outcome("/settings", "Scan depth must be 0 (whole tree) to 100.", true);
-            if (input.Write is not ("modify" or "no-delete" or "keep-folder"))
-                return new Outcome("/settings", "W must mean \"modify\", \"no-delete\" or \"keep-folder\".", true);
             var old = St.Cfg;
             var next = old with
             {
                 ScanDepth = input.ScanDepth,
-                Write = input.Write,
                 Hidden = Clean(input.Hidden),
                 FullControl = Clean(input.FullControl) is { Count: > 0 } fc ? fc : M.DefaultFullControl,
                 State = input.State.Trim().TrimEnd('\\'),
@@ -154,7 +149,6 @@ public sealed partial class Session
             }
             JsonArray Arr(IEnumerable<string> xs) => new(xs.Select(x => (JsonNode)x!).ToArray());
             Diff("scan_depth", old.ScanDepth, next.ScanDepth);
-            Diff("write", old.Write, next.Write);
             Diff("hidden", Arr(old.Hidden), Arr(next.Hidden));
             Diff("full_control", Arr(old.FullControl), Arr(next.FullControl));
             Diff("state", old.State, next.State);
@@ -183,7 +177,7 @@ public sealed partial class Session
             {
                 return new Outcome("/settings", $"Settings not saved: {e.Message}", true);
             }
-            M.Configure(next.Write, next.Hidden, next.FullControl);
+            M.Configure(next.Hidden, next.FullControl);
             if (moveState) St.UseState(next with { File = target }); // the log entry below goes into the new log
             else St.ApplySettings(next with { File = target });
             St.Audit.Append(new JsonObject
@@ -205,15 +199,13 @@ public sealed partial class Session
             else if (!St.Ready)
                 St.Rescan();
             else
-                St.Rescan(St.Snap); // W, hidden and full-control accounts, the state folder: worked out from the last scan
+                St.Rescan(St.Snap); // hidden and full-control accounts, the state folder: worked out from the last scan
             message = (adopted ? $"Now using the state folder {next.StateDir} and its settings (those of the admins who use it)."
                     : $"Settings saved to {next.SharedFile}.")
                 + (changes.ContainsKey("scan_depth") && St.OpenShare is null ? " The scan depth applies at the next start." : "")
                 + (moved is null ? "" : moved.Existing
                     ? adopted ? " Nothing was moved." : $" {next.StateDir} already held owlseye state: it is used from now on, nothing was moved."
-                    : $" Moved {moved.Moved.Count} {(moved.Moved.Count == 1 ? "file" : "files")} to {next.StateDir}.")
-                + (changes.ContainsKey("write") && M.KeepFolder && St.Ready && Rights.PlainModifyEntries(St.Snap) is > 0 and var n
-                    ? $" {n} W entr{(n == 1 ? "y" : "ies")} still let users move their folder: the Findings page converts them." : "");
+                    : $" Moved {moved.Moved.Count} {(moved.Moved.Count == 1 ? "file" : "files")} to {next.StateDir}.");
         }
         St.NotifyChanged();
         return new Outcome("/settings", message);

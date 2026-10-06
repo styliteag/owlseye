@@ -74,6 +74,12 @@ else
         var gone = o.Before.Count(a => !a.Allow);
         <tr><td class="mono">@o.Path</td><td colspan="3"><b>clear</b>: back to the default; inherits from the parent, no entries of its own@(gone > 0 ? $" (also removes {gone} deny entr{(gone == 1 ? "y" : "ies")})" : "")</td><td></td></tr>
       }
+      if (o.KeptBefore != o.KeptAfter)
+      {
+        <tr><td class="mono">@Root(o.Path)</td><td colspan="3">@(o.KeptAfter
+          ? "📌 users can no longer delete, rename or move this folder (W written without delete on the folder)"
+          : "users can delete, rename and move this folder again (W written as Modify)")</td><td></td></tr>
+      }
       else if (o.Reinherited)
       {
         <tr><td class="mono">@Root(o.Path)</td><td colspan="3"><b>↻ re-apply inheritance</b>: Windows takes the parent folder's inherited

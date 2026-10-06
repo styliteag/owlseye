@@ -22,7 +22,9 @@ public sealed record AclOp(
     IReadOnlyList<Change> Changes,
     bool NewFolder = false,
     bool Cleared = false, // default restored: inherits, no own entries
-    bool Reinherited = false); // written as it is, so Windows works its inherited entries out anew (a moved folder)
+    bool Reinherited = false, // written as it is, so Windows works its inherited entries out anew (a moved folder)
+    bool KeptBefore = false, // users cannot delete, rename or move the folder (Rights.Kept)
+    bool KeptAfter = false);
 
 public sealed record Impact(string User, string Display, string Path, string? Before, string? After);
 
@@ -46,9 +48,11 @@ public sealed class Plan
 public static class Planner
 {
     /// <summary>Snapshot with cells set; SYSTEM/Administrators on changed protected folders. owners: (Creator Owner or
-    /// Owner Rights, path) -> the owner entry there (Acl.SetOwnerEntry).</summary>
+    /// Owner Rights, path) -> the owner entry there (Acl.SetOwnerEntry). kept: path -> users cannot move the folder
+    /// (Acl.SetKept); elsewhere a folder stays as kept as it is (Rights.Kept), and W is written in its form.</summary>
     public static Snapshot WithCells(Snapshot work, IEnumerable<KeyValuePair<(string Sid, string Path), string?>> values,
-        IReadOnlySet<string> touched, IReadOnlyDictionary<(string Sid, string Path), string?>? owners = null)
+        IReadOnlySet<string> touched, IReadOnlyDictionary<(string Sid, string Path), string?>? owners = null,
+        IReadOnlyDictionary<string, bool>? kept = null)
     {
         var ownersByPath = (owners ?? new Dictionary<(string Sid, string Path), string?>())
             .GroupBy(kv => kv.Key.Path).ToDictionary(g => g.Key, g => g.ToList());
@@ -60,12 +64,14 @@ public static class Planner
         }
         var folders = new Dictionary<string, Folder>(work.Folders);
         var required = Rights.RequiredFullControl(work);
-        foreach (var path in byPath.Keys.Union(touched).Union(ownersByPath.Keys))
+        foreach (var path in byPath.Keys.Union(touched).Union(ownersByPath.Keys).Union(kept?.Keys ?? []))
         {
             var f = folders[path];
             IEnumerable<Ace> ex = f.Explicit;
+            var keep = kept is not null && kept.TryGetValue(path, out var k) ? k : Rights.Kept(f);
+            if (kept is not null && kept.ContainsKey(path)) ex = Acl.SetKept(ex, keep);
             foreach (var (sid, v) in byPath.GetValueOrDefault(path) ?? [])
-                ex = Acl.SetCell(ex, work.Principals[sid], v);
+                ex = Acl.SetCell(ex, work.Principals[sid], v, keep);
             foreach (var ((osid, _), ov) in ownersByPath.GetValueOrDefault(path) ?? []) ex = Acl.SetOwnerEntry(ex, osid, ov);
             if (f.Protected || f.Level == 0) ex = Acl.EnsureAdmins(ex, required, f.Aces.Where(a => a.Inherited));
             folders[path] = f with { Aces = [.. Acl.Canonical(ex), .. f.Aces.Where(a => a.Inherited)] };
@@ -157,7 +163,8 @@ public static class Planner
         IReadOnlyDictionary<string, Principal>? extra = null,
         IEnumerable<string>? clearIn = null,
         RightsCache? cache = null,
-        IEnumerable<string>? reinheritIn = null)
+        IEnumerable<string>? reinheritIn = null,
+        IReadOnlyDictionary<string, bool>? keptIn = null)
     {
         if (cache is not null && !ReferenceEquals(cache.Snap, snap)) cache = null;
         List<string> createOps;
@@ -200,6 +207,12 @@ public static class Planner
             if (!snap.Folders.TryGetValue(path, out var f) || f.Parent is null || f.Protected || f.OtherAces)
                 throw new PlanError($"Inheritance can only be re-applied on existing folders below the root that inherit: {Msg.Quote(path)}");
         touched.UnionWith(reinherit);
+        // users cannot delete, rename or move these folders (true), or can again (false)
+        var kept = (keptIn ?? new Dictionary<string, bool>()).Where(kv => !clear.Contains(kv.Key)).ToDictionary();
+        foreach (var path in kept.Keys)
+            if (!workFolders.TryGetValue(path, out var f) || f.OtherAces)
+                throw new PlanError($"Only existing folders without ACL entries of other types can be kept from moving: {Msg.Quote(path)}");
+        touched.UnionWith(kept.Keys);
 
         var required = Rights.RequiredFullControl(work);
         foreach (var ((sid, path), v) in changes)
@@ -240,10 +253,10 @@ public static class Planner
             before.TryGetValue(k, out var e) ? e.Value != v || !e.Standard : v is not null;
 
         var want = changes.Where(kv => Differs(kv.Key, kv.Value)).ToDictionary();
-        var auto = Traverse(before, WithCells(work, want, touched, owners), want, cache);
+        var auto = Traverse(before, WithCells(work, want, touched, owners, kept), want, cache);
         var merged = new Dictionary<(string Sid, string Path), string?>(want);
         foreach (var (k, v) in auto) merged[k] = v;
-        var final = WithCells(work, merged, touched, owners);
+        var final = WithCells(work, merged, touched, owners, kept);
         if (clear.Count > 0) // what is still explicit after removing the cells (Deny, SYSTEM etc.) is dropped too
         {
             var fs = new Dictionary<string, Folder>(final.Folders);
@@ -287,7 +300,8 @@ public static class Planner
                 var o1 = Rights.OwnerEntryOf(f1, osid);
                 if (o0 != o1) ch.Add(new Change(osid, M.OwnerEntryName(osid), path, o0, o1));
             }
-            ops.Add(new AclOp(path, prot0, f1.Protected, b, a, ch, f0 is null, clear.Contains(path), reinherit.Contains(path)));
+            ops.Add(new AclOp(path, prot0, f1.Protected, b, a, ch, f0 is null, clear.Contains(path), reinherit.Contains(path),
+                f0 is not null && Rights.Kept(f0), Rights.Kept(f1)));
         }
         // Windows works inheritance out anew for every folder it writes and everything below it, up to folders with broken
         // inheritance: that ends a moved folder's leftovers too

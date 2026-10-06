@@ -4,7 +4,7 @@
 window.owlseye = (function () {
   'use strict';
 
-  const RIGHT_KEYS = { r: 'R', w: 'W', m: 'W', f: 'F', l: 'R|', '|': 'R|', W: 'W|', Delete: '', Backspace: '', '0': '', '-': '' };
+  const RIGHT_KEYS = { r: 'R', w: 'W', m: 'W', n: 'W-', f: 'F', l: 'R|', '|': 'R|', W: 'W|', Delete: '', Backspace: '', '0': '', '-': '' };
   let dotnet = null;
   let focusKey = null;
 

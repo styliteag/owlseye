@@ -27,7 +27,7 @@ public static class Launch
         {
             // state folder not reachable or file broken: the local settings apply, the settings page shows the folder
         }
-        M.Configure(cfg.Write, cfg.Hidden, cfg.FullControl); // before any provider scans or builds ACEs
+        M.Configure(cfg.Hidden, cfg.FullControl); // before any provider scans or builds ACEs
         M.ShowHidden = Settings.ShowHidden();
         if (cfg.Provider == "sim" && !string.IsNullOrEmpty(path)) cfg = cfg with { SimDir = path };
         IProvider provider;

@@ -28,7 +28,6 @@ public sealed record Config
     public string Audit { get; init; } = ""; // path to audit.jsonl; empty = in the state folder
     public string SimDir { get; init; } = ""; // provider=sim only; empty = local
     public string Baseline { get; init; } = ""; // folder for desired-<share>.json; empty = AppData (demo: memory only)
-    public string Write { get; init; } = "modify"; // what W means: "modify" (with delete) or "no-delete"
     public IReadOnlyList<string> Hidden { get; init; } = []; // further accounts to hide like the administrators
     public IReadOnlyList<string> FullControl { get; init; } = M.DefaultFullControl; // must have full control (root, broken inheritance)
 
@@ -54,7 +53,6 @@ public sealed record Config
         return this with
         {
             ScanDepth = (int?)raw.Long("scan_depth") ?? ScanDepth,
-            Write = raw.Str("write") ?? Write,
             Hidden = Strings(raw["hidden"]) ?? Hidden,
             FullControl = Strings(raw["full_control"]) is { Count: > 0 } fc ? fc : FullControl,
         };
@@ -65,7 +63,7 @@ public sealed record Config
     {
         var raw = System.IO.File.Exists(path) ? JsonNode.Parse(System.IO.File.ReadAllText(path)) as JsonObject ?? [] : [];
         raw["scan_depth"] = c.ScanDepth;
-        raw["write"] = c.Write;
+        raw.Remove("write"); // W- and folders users cannot move are set in the matrix now
         raw["hidden"] = new JsonArray(c.Hidden.Select(h => (JsonNode)h!).ToArray());
         raw["full_control"] = new JsonArray(c.FullControl.Select(h => (JsonNode)h!).ToArray());
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
@@ -93,7 +91,6 @@ public sealed record Config
             Audit = raw.Str("audit") ?? c.Audit,
             SimDir = raw.Str("sim_dir") ?? c.SimDir,
             Baseline = raw.Str("baseline") ?? c.Baseline,
-            Write = raw.Str("write") ?? c.Write,
             Hidden = Strings(raw["hidden"]) ?? c.Hidden,
             FullControl = Strings(raw["full_control"]) is { Count: > 0 } fc ? fc : c.FullControl,
             File = path,

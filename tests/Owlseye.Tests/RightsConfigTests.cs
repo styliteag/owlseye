@@ -97,20 +97,16 @@ public sealed class RightsConfigTests : TestBase
     }
 
     [Fact]
-    public void ConfigJsonReadsWriteAndHidden()
+    public void ConfigJsonReadsHiddenAndIgnoresTheOldWriteKey()
     {
         var file = Path.Combine(Tmp, "config.json");
         File.WriteAllText(file, """{"write": "no-delete", "hidden": ["CORP\\backup", "S-1-5-21-9-9-9-1234"]}""");
-        var cfg = Config.Load(file);
-        Assert.Equal("no-delete", cfg.Write);
-        Assert.Equal(["CORP\\backup", "S-1-5-21-9-9-9-1234"], cfg.Hidden);
-        var plain = Config.Load(null);
-        Assert.Equal("modify", plain.Write);
-        Assert.Empty(plain.Hidden);
+        Assert.Equal(["CORP\\backup", "S-1-5-21-9-9-9-1234"], Config.Load(file).Hidden); // W- is set per cell now
+        Assert.Empty(Config.Load(null).Hidden);
     }
 }
 
-/// <summary>Tests that change the process-wide settings of M (what W means, hidden accounts). They run alone and put
+/// <summary>Tests that change the process-wide settings of M (hidden and full-control accounts). They run alone and put
 /// the defaults back, so no other test sees them.</summary>
 [CollectionDefinition(nameof(GlobalRightsSettings), DisableParallelization = true)]
 public sealed class GlobalRightsSettings;
@@ -118,75 +114,98 @@ public sealed class GlobalRightsSettings;
 [Collection(nameof(GlobalRightsSettings))]
 public sealed class RightsSettingsTests : TestBase, IDisposable
 {
-    void IDisposable.Dispose() => M.Configure("modify", []);
+    void IDisposable.Dispose() => M.Configure([]);
+
+    const string Staff = @"Operations\Sales-Staff"; // inherits; G-Sales-Lead and G-Sales-Staff have W there
+
+    static Ace E(uint mask, int flags) => new("S", "X\\G", "group", mask, Flags: flags);
 
     [Fact]
-    public void WriteWithoutDeleteMakesThatTheStandardEntry()
+    public void WMinusIsWriteWithoutDelete()
     {
-        M.Configure("no-delete", []);
-        Assert.Equal(M.WriteNoDelete, M.Write);
-        Assert.Equal(("W", true), Rights.Classify([new Ace("S-1-5-21-9", "X\\G", "group", M.WriteNoDelete, Flags: M.OiCi)]));
-        Assert.Equal(("W", false), Rights.Classify([new Ace("S-1-5-21-9", "X\\G", "group", M.Modify, Flags: M.OiCi)]));
-        M.Configure("modify", []);
-        Assert.Equal(M.Modify, M.Standard["W"].Mask);
-    }
-
-    [Fact]
-    public void KeepFolderWritesWAsTwoEntriesSoTheFolderItselfStays()
-    {
-        M.Configure("keep-folder", []);
-        Assert.Equal(M.Modify, M.Write);
-        Ace E(uint mask, int flags) => new("S", "X\\G", "group", mask, Flags: flags);
-        Assert.Equal(("W", true), Rights.Classify([E(M.Modify, M.OiCi | M.InheritOnly), E(M.WriteNoDelete, M.ThisFolder)]));
-        Assert.Equal(("W", false), Rights.Classify([E(M.Modify, M.OiCi)])); // the usual Modify entry: W*, set it again
-        Assert.Equal(("W|", true), Rights.Classify([E(M.WriteNoDelete, M.ThisFolder)]));
-        Assert.Equal("W Modify inside (the folder itself cannot be deleted, renamed or moved)", Labels.Label("W"));
-
-        const string Staff = @"Operations\Sales-Staff";
+        Assert.Equal(("W-", true), Rights.Classify([E(M.WriteNoDelete, M.OiCi)]));
+        Assert.Equal(("W", true), Rights.Classify([E(M.Modify, M.OiCi)]));
+        Assert.True(M.Rank("R") < M.Rank("W-") && M.Rank("W-") < M.Rank("W"));
         var snap = new DemoProvider().Scan();
-        var plan = Planner.Build(snap, new Dictionary<(string Sid, string Path), string?> { [(Demo.Gsid("G-HR"), Staff)] = "W" });
-        var after = plan.AclOps.Single(o => o.Path == Staff).After.Where(a => a.Sid == Demo.Gsid("G-HR")).Select(a => (a.Mask, a.Flags)).Order();
-        Assert.Equal([(M.WriteNoDelete, M.ThisFolder), (M.Modify, M.OiCi | M.InheritOnly)], after.ToList().Order());
-        Assert.Equal(("W", true), (plan.CellsAfter[(Demo.Gsid("G-HR"), Staff)].Direct, plan.CellsAfter[(Demo.Gsid("G-HR"), Staff)].Standard));
-        Assert.Equal("W", plan.CellsAfter[(Demo.Gsid("G-HR"), Staff + @"\2025")].Effective); // passes down like W
+        var plan = Planner.Build(snap, new Dictionary<(string Sid, string Path), string?> { [(Demo.Gsid("G-HR"), Staff)] = "W-" });
+        var after = plan.AclOps.Single(o => o.Path == Staff).After.Where(a => a.Sid == Demo.Gsid("G-HR")).Select(a => (a.Mask, a.Flags));
+        Assert.Equal([(M.WriteNoDelete, M.OiCi)], after);
+        Assert.Equal("W-", plan.CellsAfter[(Demo.Gsid("G-HR"), Staff + @"\2025")].Effective); // passes down
     }
 
     [Fact]
-    public void KeepFolderMarksTheOldWAndConvertsItInOneGo()
+    public void AFolderKeptFromMovingHasItsWWrittenAsTwoEntries()
+    {
+        var kept = M.StandardAces("W", kept: true);
+        Assert.Equal([(M.WriteNoDelete, M.ThisFolder), (M.Modify, M.OiCi | M.InheritOnly)], kept);
+        Assert.Equal(("W", true), Rights.Classify([E(M.Modify, M.OiCi | M.InheritOnly), E(M.WriteNoDelete, M.ThisFolder)], kept: true));
+        Assert.Equal(("W|", true), Rights.Classify([E(M.WriteNoDelete, M.ThisFolder)], kept: true));
+
+        var snap = new DemoProvider().Scan();
+        Assert.False(Rights.Kept(snap.Folders[Staff]));
+        var plan = Planner.Build(snap, new Dictionary<(string Sid, string Path), string?> { [(Demo.Gsid("G-HR"), Staff)] = "W" },
+            keptIn: new Dictionary<string, bool> { [Staff] = true });
+        var op = plan.AclOps.Single(o => o.Path == Staff);
+        Assert.True(!op.KeptBefore && op.KeptAfter);
+        foreach (var g in new[] { "G-Sales-Lead", "G-Sales-Staff", "G-HR" }) // existing W converted, the new one written so
+            Assert.Equal(kept.Order(), op.After.Where(a => a.Sid == Demo.Gsid(g)).Select(a => (a.Mask, a.Flags)).Order());
+        Assert.True(plan.CellsAfter[(Demo.Gsid("G-HR"), Staff)].Standard);
+        Assert.Equal("W", plan.CellsAfter[(Demo.Gsid("G-HR"), Staff + @"\2025")].Effective); // works inside as before
+        Assert.True(Rights.Kept(plan.SnapAfter.Folders[Staff]));
+
+        var back = Planner.Build(plan.SnapAfter, new Dictionary<(string Sid, string Path), string?>(), keptIn: new Dictionary<string, bool> { [Staff] = false });
+        Assert.Equal([(M.Modify, M.OiCi)], back.AclOps.Single().After.Where(a => a.Sid == Demo.Gsid("G-HR")).Select(a => (a.Mask, a.Flags)));
+    }
+
+    [Fact]
+    public void TheFolderPanelKeepsUsersFromMovingTheFolderWithPreviewAndUndo()
     {
         var st = new State(new Config { Provider = "demo", Audit = Path.Combine(Tmp, "log.jsonl") }, new DemoProvider());
         st.Load();
         var s = new Session(st);
-        var plain = s.SettingsPage().PlainModify; // the settings page says how many W entries "keep-folder" would concern
-        Assert.True(plain > 0);
-        Assert.False(s.FindingsChecks().KeepFolder);
+        Assert.True(s.FolderPanel(Staff).CanKeep && !s.FolderPanel(Staff).Kept);
+        Assert.False(s.FolderPanel(@"Operations\Sales-Staff\2025").CanKeep); // no W of its own: nothing to keep
 
-        M.Configure("keep-folder", []);
-        st.Rescan(st.Snap);
-        Assert.DoesNotContain(st.Findings, f => f.Text.Contains("(shown as W)")); // marked, not special entries
-        Assert.Equal((true, plain), (s.FindingsChecks().KeepFolder, s.FindingsChecks().MovableW));
-        CellInfo HrW() => s.Matrix().Rows.Single(r => r.Folder.Path == "HR").Cells.Single(c => c.Kind == "direct" && c.Value == "W");
-        Assert.Equal(("W movable", "W"), HrW().Display());
+        s.SetKept(Staff, true);
+        Assert.Equal(1, st.PendingCount);
+        Assert.True(s.FolderPanel(Staff).Kept && s.FolderPanel(Staff).KeptPending);
+        Assert.True(s.Matrix().Rows.Single(r => r.Folder.Path == Staff).Kept); // 📌 already while pending
+        Assert.True(s.Preview().Plan!.AclOps.Single(o => o.Path == Staff).KeptAfter);
+        Assert.False(s.Apply("keep", s.Preview().Phash).Error);
+        Assert.Equal((1, 0), (s.FindingsChecks().Kept, s.FindingsChecks().StillMovable));
 
-        var o = s.ConvertMovableW();
-        Assert.Equal("/preview", o.Url);
-        Assert.Equal(plain, st.PendingCount);
-        Assert.False(s.Apply("convert", s.Preview().Phash).Error);
-        Assert.Equal(0, s.FindingsChecks().MovableW);
-        Assert.Equal(("W", "W"), HrW().Display());
+        var entry = st.Audit.Entries().First(e => e.Arr("acl_ops") is { Count: > 0 });
+        Assert.True(entry.Arr("acl_ops")![0]!.AsObject().Bool("kept_after"));
+        s.Undo(entry.Str("id")!);
+        Assert.False(s.Apply("undo", s.Preview().Phash).Error);
+        Assert.False(s.FolderPanel(Staff).Kept);
     }
 
     [Fact]
-    public void UnknownWriteSettingIsRefused()
+    public void APlainWOnAKeptFolderIsMarkedAndAFinding()
     {
-        var e = Assert.Throws<ArgumentException>(() => M.Configure("delete", []));
-        Assert.Contains("\"modify\", \"no-delete\" or \"keep-folder\"", e.Message);
+        var snap = new DemoProvider().Scan();
+        var f = snap.Folders[Staff];
+        var lead = Demo.Gsid("G-Sales-Lead");
+        snap.Folders[Staff] = f with
+        {
+            Aces = [.. f.Aces.Where(a => a.Sid != lead), .. M.StandardAces("W", kept: true).Select(s => new Ace(lead, "DEMO\\G-Sales-Lead", "group", s.Mask, Flags: s.Flags))],
+        };
+        Assert.True(Rights.Kept(snap.Folders[Staff]));
+        Assert.Equal([Demo.Gsid("G-Sales-Staff")], Rights.StillMovable(snap.Folders[Staff]).Select(a => a.Sid));
+        var cells = Rights.Matrix(snap);
+        Assert.True(cells[(Demo.Gsid("G-Sales-Staff"), Staff)].Movable);
+        Assert.Contains(Rights.Findings(snap), x => x.Path == Staff && x.Text.StartsWith("G-Sales-Staff can still delete, rename or move this folder"));
+        Assert.DoesNotContain(Rights.Findings(snap), x => x.Text.Contains("(shown as W)")); // not a special entry
+
+        var plan = Planner.Build(snap, new Dictionary<(string Sid, string Path), string?>(), keptIn: new Dictionary<string, bool> { [Staff] = true });
+        Assert.Empty(Rights.StillMovable(plan.SnapAfter.Folders[Staff])); // keeping it again converts the rest
     }
 
     [Fact]
     public void AccountsHiddenInConfigAreNoColumns()
     {
-        M.Configure("modify", ["DEMO\\G-IT", "g-transfer", Demo.Gsid("G-HR")]); // full name, short name in other case, SID
+        M.Configure(["DEMO\\G-IT", "g-transfer", Demo.Gsid("G-HR")]); // full name, short name in other case, SID
         var cfg = new Config { Provider = "demo", Audit = Path.Combine(Tmp, "log.jsonl") };
         var st = new State(cfg, new DemoProvider());
         st.Load();

@@ -92,7 +92,7 @@ public class AclPlannerTests : TestBase
         var plan = Planner.Build(snap, Ch(Gsid("G-IT"), @"Programs\Payroll", "W"));
         var op = Assert.Single(plan.AclOps);
         var edv = op.After.Where(a => a.Sid == Gsid("G-IT")).ToList();
-        Assert.Equal([(M.Write, 3)], edv.Select(a => (a.Mask, a.Flags)));
+        Assert.Equal([(M.Modify, 3)], edv.Select(a => (a.Mask, a.Flags)));
     }
 
     [Fact]

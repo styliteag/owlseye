@@ -35,6 +35,7 @@ public sealed class State
     public OrderedDictionary<string, string> PendingNew { get; } = []; // new folder -> parent folder
     public HashSet<string> PendingClear { get; } = []; // reset folder to the default (inherits, no own entries)
     public HashSet<string> PendingReinherit { get; } = []; // write as it is: Windows takes the parent's inherited entries again
+    public Dictionary<string, bool> PendingKept { get; } = []; // users cannot delete, rename or move the folder (Rights.Kept)
     public OrderedDictionary<string, Principal> Extra { get; private set; } = []; // columns for groups not yet in any ACL
 
     /// <summary>Builds a provider for another share path (local/windows); null = the share is fixed.</summary>
@@ -211,7 +212,7 @@ public sealed class State
                 return lp.Plan ?? throw new PlanError(lp.Error!.Message);
             try
             {
-                var plan = Planner.Build(Snap, Pending, PendingFolders, Cfg.MaxLevel, PendingNew, Extra, PendingClear, Cache, PendingReinherit);
+                var plan = Planner.Build(Snap, Pending, PendingFolders, Cfg.MaxLevel, PendingNew, Extra, PendingClear, Cache, PendingReinherit, PendingKept);
                 lastPlan = (Snap, key, plan, null);
                 return plan;
             }
@@ -236,6 +237,8 @@ public sealed class State
         foreach (var p in PendingClear.Order(StringComparer.Ordinal)) sb.Append(p).Append('\u0001');
         sb.Append('\u0002');
         foreach (var p in PendingReinherit.Order(StringComparer.Ordinal)) sb.Append(p).Append('\u0001');
+        sb.Append('\u0002');
+        foreach (var (p, v) in PendingKept.OrderBy(kv => kv.Key, StringComparer.Ordinal)) sb.Append(p).Append(v ? '+' : '-').Append('\u0001');
         sb.Append('\u0003');
         foreach (var (sid, p) in Extra) sb.Append(sid).Append('\u0002').Append(p.Name).Append('\u0002').Append(p.Kind).Append('\u0001');
         return sb.ToString();
@@ -254,7 +257,7 @@ public sealed class State
         }
     }
 
-    public int PendingCount => Pending.Count + PendingFolders.Count + PendingNew.Count + PendingClear.Count + PendingReinherit.Count;
+    public int PendingCount => Pending.Count + PendingFolders.Count + PendingNew.Count + PendingClear.Count + PendingReinherit.Count + PendingKept.Count;
 
     public void Clear()
     {
@@ -263,6 +266,7 @@ public sealed class State
         PendingNew.Clear();
         PendingClear.Clear();
         PendingReinherit.Clear();
+        PendingKept.Clear();
         Extra.Clear();
     }
 

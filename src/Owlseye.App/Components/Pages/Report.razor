@@ -49,7 +49,7 @@
       <div class="card"><b class="@(R.Findings.Any(f => f.Severity == "high") ? "loss" : "")">@R.Findings.Count</b>findings</div>
       <div class="card"><b>@R.Changes.Count</b>changes in @R.ChangeDays days</div>
     </div>
-    <p class="small muted">Rights: <b>W</b> @Labels.WriteText(),
+    <p class="small muted">Rights: <b>W</b> modify (read, write and delete), <b>W-</b> write without delete,
       <b>R</b> read (this folder and everything below), <b>W|</b> / <b>R|</b> this folder only; <span class="inh">(W)</span> inherited
       from a parent folder; <b>F</b> full control; <b>*</b> another special entry (not one of the standard entries);
       ⛔ inheritance broken. @(M.ShowHidden

@@ -32,21 +32,6 @@
 
   <section>
     <h2>Rights</h2>
-    <p>W means:
-      <label><input type="radio" name="write" checked="@(write == "modify")" @onchange="@(() => write = "modify")"> Modify (read, write and delete)</label>
-      <label><input type="radio" name="write" checked="@(write == "no-delete")" @onchange="@(() => write = "no-delete")"> Read and write, no delete</label>
-      <label><input type="radio" name="write" checked="@(write == "keep-folder")" @onchange="@(() => write = "keep-folder")"> Modify inside, the folder itself cannot be deleted, renamed or moved</label>
-    </p>
-    <p class="muted small">"Modify inside" writes W as two entries: write without delete on the folder itself, Modify on its
-      subfolders and files. Users then cannot delete, rename or move a folder through its W entry (a moved folder would take its
-      rights along).
-      @if (write == "keep-folder" && V.Write != "keep-folder" && V.PlainModify > 0)
-      {
-        <br><b>@V.PlainModify W entr@(V.PlainModify == 1 ? "y is" : "ies are") the single Modify entry on this share.</b>
-        <text> They keep working, and saving writes nothing: the matrix marks them</text> <span class="c W movable">W</span>
-        <text> and the Findings page converts them in one go, with a preview.</text>
-      }
-    </p>
     <label>Accounts that must have full control on the root and on folders with broken inheritance
       <textarea rows="4" @bind="fullControl" placeholder="SYSTEM&#10;Administrators"></textarea></label>
     <AccountPicker OnPick="@(v => fullControl = AddLine(fullControl, v))" />
@@ -93,7 +78,7 @@
 
   SettingsView? V;
   int scanDepth;
-  string write = "modify", fullControl = "", hidden = "", state = "", reason = "";
+  string fullControl = "", hidden = "", state = "", reason = "";
   bool loaded;
 
   protected override void Refresh()
@@ -102,7 +87,6 @@
     if (loaded) return; // keep what is being edited when the state changes
     loaded = true;
     scanDepth = V.ScanDepth;
-    write = V.Write;
     fullControl = string.Join("\n", V.FullControl);
     hidden = string.Join("\n", V.Hidden);
     state = V.State;
@@ -123,7 +107,7 @@
 
   Task Save()
   {
-    var input = new SettingsInput(scanDepth, write, hidden.Split('\n'), fullControl.Split('\n'), state);
+    var input = new SettingsInput(scanDepth, hidden.Split('\n'), fullControl.Split('\n'), state);
     var r = reason;
     loaded = false; // show what was saved
     return Busy(() => S.SaveSettings(input, r));

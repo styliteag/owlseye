@@ -26,7 +26,8 @@
   <label class="showhidden" title="SYSTEM, Administrators, Domain Admins and the accounts hidden in the settings as columns you can set. Findings and the desired state leave them out either way. Remembered for you.">
     <input type="checkbox" checked="@M.ShowHidden" @onchange="OnShowHidden"> Hidden accounts</label>
   <div class="legend">
-    <span class="c W">W</span> @Labels.WriteText()
+    <span class="c W">W</span> Modify
+    <span class="c W-">W-</span> write, no delete
     <span class="c R">R</span> Read
     <span class="c F">F</span> full control
     <span class="c RL">R|</span> list this folder only
@@ -36,11 +37,8 @@
     <span class="c auto RL">R|</span> automatic
     · <span class="inh-icon off">⛔</span> inheritance broken
     · <span class="moved-icon">↯</span> moved folder (rights of its old place)
-    @if (M.KeepFolder)
-    {
-      <text>· </text><span class="c W movable">W</span><text> W the folder can still be moved (convert on Findings)</text>
-    }
-    · Keys: arrows move, <kbd>R</kbd> <kbd>W</kbd> <kbd>F</kbd>, <kbd>L</kbd> R|, <kbd>Shift</kbd>+<kbd>W</kbd> W|, <kbd>Del</kbd> none, <kbd>Enter</kbd> details
+    · <span class="kept-icon">📌</span> users cannot move the folder (<span class="c W movable">W</span> but this W still lets them)
+    · Keys: arrows move, <kbd>R</kbd> <kbd>W</kbd> <kbd>F</kbd>, <kbd>N</kbd> W-, <kbd>L</kbd> R|, <kbd>Shift</kbd>+<kbd>W</kbd> W|, <kbd>Del</kbd> none, <kbd>Enter</kbd> details
   </div>
 </div>
 <div class="matrix-wrap">
@@ -101,7 +99,7 @@
         <CellPanelView Model="cellPanel" OnSetRight="SetFromPanel" OnInheritance="InheritanceFromCell" />
         break;
       case "folder" when folderPanel is not null:
-        <FolderPanelView Model="folderPanel" OnInheritance="InheritanceFromFolder" OnClear="ClearFolder" TryNewFolder="NewFolder" OnCancelNew="CancelNew" OnOwnerEntry="OwnerEntry" OnReinherit="Reinherit" />
+        <FolderPanelView Model="folderPanel" OnInheritance="InheritanceFromFolder" OnClear="ClearFolder" TryNewFolder="NewFolder" OnCancelNew="CancelNew" OnOwnerEntry="OwnerEntry" OnReinherit="Reinherit" OnKept="Kept" />
         break;
       case "groups" when groupsPanel is not null:
         <GroupsPanelView Model="groupsPanel" OnSearch="SearchGroups" OnAdd="AddColumn" />
@@ -238,6 +236,8 @@
   void ClearFolder() => Act(() => S.ClearFolder(panelPath));
 
   void Reinherit() => Act(() => S.ReinheritFolder(panelPath));
+
+  void Kept(bool kept) => Act(() => S.SetKept(panelPath, kept));
 
   void OwnerEntry((string Sid, string? Value) e) => Act(() => S.SetOwnerEntry(e.Sid, panelPath, e.Value));
 

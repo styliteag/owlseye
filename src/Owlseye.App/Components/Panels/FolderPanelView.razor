@@ -19,7 +19,7 @@ else if (f.Level > 0)
     }
     else
     {
-      <b>Inherits</b> <text>R and W from its parent folders.</text>
+      <b>Inherits</b> <text>R, W-, W and F from its parent folders.</text>
     }
     @if (Model.Stale)
     {
@@ -66,6 +66,30 @@ else if (f.Level > 0)
     <p class="muted small">Clear: back to the default, like a new folder. It inherits from @(f.Parent is { Length: > 0 } pp ? pp : "(root)") and loses all its own entries. R| that owlseye added on parent folders for these entries is removed as well.</p>
   }
   <p class="muted small">The preview shows every affected user before anything is written.</p>
+}
+@if (Model.CanKeep)
+{
+  <h4>Moving</h4>
+  <p class="small">@(Model.Kept
+    ? "📌 Users cannot delete, rename or move this folder; they can work with everything in it."
+    : "Users with W can delete, rename or move this folder.")@(Model.KeptPending ? " (pending)" : "")</p>
+  @if (Model.StillMovable is { Count: > 0 } still)
+  {
+    <p class="small loss">@string.Join(", ", still) can still do it: their W is the plain Modify entry.</p>
+  }
+  <div class="choices">
+    @if (!Model.Kept || Model.StillMovable is { Count: > 0 })
+    {
+      <button class="primary" @onclick="() => OnKept.InvokeAsync(true)">Keep users from moving it</button>
+    }
+    @if (Model.Kept)
+    {
+      <button @onclick="() => OnKept.InvokeAsync(false)">Let users move it again</button>
+    }
+  </div>
+  <p class="muted small">Writes every W here as write without delete on the folder and Modify on its subfolders and files (W| as write
+    without delete); W set here later too. A moved folder would take its rights along. Folders below that inherit W can still
+    be moved: keep them on their own or break inheritance.</p>
 }
 @if (Model.CanAdd && !Model.IsNew)
 {
@@ -158,6 +182,8 @@ else if (f.Level > 0)
 
   [Parameter] public EventCallback OnClear { get; set; }
   [Parameter] public EventCallback OnReinherit { get; set; }
+  /// <summary>true = users cannot delete, rename or move the folder, false = they can again.</summary>
+  [Parameter] public EventCallback<bool> OnKept { get; set; }
   /// <summary>Adds the new folder; false if it was refused (the name stays in the field).</summary>
   [Parameter] public Func<string, bool>? TryNewFolder { get; set; }
   [Parameter] public EventCallback<string> OnCancelNew { get; set; }

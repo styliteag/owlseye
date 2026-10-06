@@ -49,12 +49,32 @@ public static class Acl
     }
 
     /// <summary>Replace all Allow entries of the account with the standard entry for `value` (null = remove).</summary>
-    public static List<Ace> SetCell(IEnumerable<Ace> explicitAces, Principal p, string? value)
+    public static List<Ace> SetCell(IEnumerable<Ace> explicitAces, Principal p, string? value, bool kept = false)
     {
         var rest = explicitAces.Where(a => !(a.Allow && a.Sid == p.Sid)).ToList();
         if (value is null) return rest;
-        foreach (var (mask, flags) in M.StandardAces(value)) rest.Add(new Ace(p.Sid, p.Name, p.Kind, mask, true, false, flags));
+        foreach (var (mask, flags) in M.StandardAces(value, kept)) rest.Add(new Ace(p.Sid, p.Name, p.Kind, mask, true, false, flags));
         return rest;
+    }
+
+    /// <summary>Users cannot delete, rename or move the folder (kept), or can again: every W and W| in the other form is
+    /// written in this one (M.StandardAces). Special entries stay as they are.</summary>
+    public static List<Ace> SetKept(IEnumerable<Ace> explicitAces, bool kept)
+    {
+        var list = explicitAces.ToList();
+        var o = list.Where(a => !a.Allow).ToList();
+        foreach (var g in list.Where(a => a.Allow).GroupBy(a => a.Sid))
+        {
+            var aces = g.ToList();
+            var value = Rights.Classify(aces).Value;
+            if (value is not ("W" or "W|") || !Rights.IsForm(aces, M.StandardAces(value, !kept)))
+            {
+                o.AddRange(aces);
+                continue;
+            }
+            o.AddRange(M.StandardAces(value, kept).Select(s => new Ace(aces[0].Sid, aces[0].Name, aces[0].Kind, s.Mask, true, false, s.Flags)));
+        }
+        return o;
     }
 
     /// <summary>An owner entry (Creator Owner, Owner Rights) on this folder as one entry with a value of

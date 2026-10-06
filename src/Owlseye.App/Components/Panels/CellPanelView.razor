@@ -8,13 +8,14 @@
       <b>Entry here:</b> @(Labels.Label(info.Value) + ".")
       @if (info.Movable)
       {
-        <text> Written before W meant "Modify inside": it is the single Modify entry, so users can still delete, rename or move
-        this folder. Choose W to convert it (write without delete on the folder, Modify below); nobody loses access.</text>
+        <text> The folder is kept from moving (📌), but this entry is the plain Modify entry: through it users can still delete,
+        rename or move the folder. Choose @info.Value again to convert it (write without delete on the folder, Modify below);
+        nobody loses access.</text>
       }
       else if (!info.Standard)
       {
         <text> The ACL entry is </text><b>@(Model.Entry ?? "special")</b><text>, not one of the standard entries. Choosing a right
-        replaces it with the standard entry (W = @Labels.WriteText()); the preview says
+        replaces it with the standard entry; the preview says
         which rights that removes.</text>
       }
       break;
@@ -49,7 +50,7 @@
               @onclick="() => OnSetRight.InvokeAsync(right ?? string.Empty)">@(r ?? "–")</button>
     }
   </div>
-  <p class="muted small">R, W and F go down into subfolders (unless inheritance is broken there); R| and W| apply to this folder only. Giving a right here adds R| on the parent folders automatically. F (full control) also lets the members change permissions and take ownership: meant for admin and service groups.</p>
+  <p class="muted small">R, W-, W and F go down into subfolders (unless inheritance is broken there); R| and W| apply to this folder only. Giving a right here adds R| on the parent folders automatically. F (full control) also lets the members change permissions and take ownership: meant for admin and service groups.</p>
 }
 else if (f.OtherAces)
 {

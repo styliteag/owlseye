@@ -31,7 +31,7 @@ public sealed class Win32Tests : IDisposable
         fs.WriteDacl("", true, [Full(Me), Full(M.System), Full(M.Admins), new RawAce(0, 0, M.Read, Users)]);
         fs.WriteDacl("A", false, [new RawAce(0, M.OiCi, M.Read, Users)]);
         fs.WriteDacl(@"A\A1", false, []);
-        fs.WriteDacl("B", true, [Full(Me), Full(M.System), Full(M.Admins), new RawAce(0, M.OiCi, M.Write, Users)]);
+        fs.WriteDacl("B", true, [Full(Me), Full(M.System), Full(M.Admins), new RawAce(0, M.OiCi, M.Modify, Users)]);
         fs.WriteDacl("C", false, []);
     }
 
@@ -110,7 +110,7 @@ public sealed class Win32Tests : IDisposable
         Assert.Contains("changes applied", o.Message);
         var (prot, aces) = Fs().ReadDacl("C");
         Assert.False(prot);
-        Assert.Contains(aces, a => a.Sid == Users && a.Mask == M.Write && a.Flags == M.OiCi);
+        Assert.Contains(aces, a => a.Sid == Users && a.Mask == M.Modify && a.Flags == M.OiCi);
         Assert.Empty(st.Drift);
         Assert.Equal("W", st.Cells[(Users, "C")].Direct);
     }
@@ -143,7 +143,7 @@ public sealed class Win32Tests : IDisposable
         var o = Apply(s);
         Assert.False(o.Error, o.Message);
         Assert.True(Directory.Exists(Path.Combine(share, "C", "New folder ä")));
-        Assert.Contains(Fs().ReadDacl(@"C\New folder ä").Aces, a => a.Sid == Users && a.Mask == M.Write && (a.Flags & M.InheritedAce) == 0);
+        Assert.Contains(Fs().ReadDacl(@"C\New folder ä").Aces, a => a.Sid == Users && a.Mask == M.Modify && (a.Flags & M.InheritedAce) == 0);
         Assert.Equal("W", st.Cells[(Users, @"C\New folder ä")].Direct);
     }
 
@@ -200,23 +200,18 @@ public sealed class Win32Tests : IDisposable
     }
 
     [Fact]
-    public void KeepFolderWritesTwoEntries()
+    public void AFolderKeptFromMovingGetsTwoEntriesPerW()
     {
-        M.Configure("keep-folder", []);
-        try
-        {
-            var (_, s) = Client();
-            s.SetCell(Users, "C", "W");
-            var o = Apply(s);
-            Assert.False(o.Error, o.Message);
-            var mine = Fs().ReadDacl("C").Aces.Where(a => a.Sid == Users && (a.Flags & M.InheritedAce) == 0).Select(a => (a.Mask, a.Flags)).Order().ToList();
-            Assert.Equal(new[] { (M.WriteNoDelete, M.ThisFolder), (M.Modify, M.OiCi | M.InheritOnly) }.Order(), mine);
-            Assert.True(s.Matrix().Rows.Single(r => r.Folder.Path == "C").Cells.Single(c => c.Value == "W").Standard);
-        }
-        finally
-        {
-            M.Configure("modify", []);
-        }
+        var (_, s) = Client();
+        s.SetCell(Users, "C", "W");
+        s.SetKept("C", true);
+        var o = Apply(s);
+        Assert.False(o.Error, o.Message);
+        var mine = Fs().ReadDacl("C").Aces.Where(a => a.Sid == Users && (a.Flags & M.InheritedAce) == 0).Select(a => (a.Mask, a.Flags)).Order().ToList();
+        Assert.Equal(new[] { (M.WriteNoDelete, M.ThisFolder), (M.Modify, M.OiCi | M.InheritOnly) }.Order(), mine);
+        var row = s.Matrix().Rows.Single(r => r.Folder.Path == "C");
+        Assert.True(row.Kept);
+        Assert.True(row.Cells.Single(c => c.Value == "W").Standard);
     }
 
     [Fact]
@@ -277,11 +272,11 @@ public sealed class Win32Tests : IDisposable
         Directory.CreateDirectory(Path.Combine(outside, "X1"));
         Junction(Path.Combine(share, "C", "link"), outside);
         var fs = Fs();
-        fs.WriteDacl("C", false, [new RawAce(0, M.OiCi, M.Write, Users)]); // Win32Fs directly, past AdProvider's refusal
+        fs.WriteDacl("C", false, [new RawAce(0, M.OiCi, M.Modify, Users)]); // Win32Fs directly, past AdProvider's refusal
         var target = new LocalFs();
         target.ToUnc(outside);
-        Assert.DoesNotContain(target.ReadDacl("").Aces, a => a.Sid == Users && a.Mask == M.Write);
-        Assert.DoesNotContain(target.ReadDacl("X1").Aces, a => a.Sid == Users && a.Mask == M.Write);
+        Assert.DoesNotContain(target.ReadDacl("").Aces, a => a.Sid == Users && a.Mask == M.Modify);
+        Assert.DoesNotContain(target.ReadDacl("X1").Aces, a => a.Sid == Users && a.Mask == M.Modify);
         Assert.Contains(fs.ReadDacl(@"A").Aces, a => a.Sid == Users); // unrelated sibling untouched, still readable
     }
 
@@ -296,7 +291,7 @@ public sealed class Win32Tests : IDisposable
                 {
                     var rel = $@"B\Bereich{a}\Team {b}\Projekt-{c}";
                     Directory.CreateDirectory(Path.Combine(share, rel));
-                    if (rnd.Next(3) == 0) fs.WriteDacl(rel, false, [new RawAce(0, rnd.Next(2) == 0 ? 0 : M.OiCi, rnd.Next(2) == 0 ? M.Read : M.Write, Users)]);
+                    if (rnd.Next(3) == 0) fs.WriteDacl(rel, false, [new RawAce(0, rnd.Next(2) == 0 ? 0 : M.OiCi, rnd.Next(2) == 0 ? M.Read : M.Modify, Users)]);
                 }
         fs.WriteDacl(@"B\Bereich2", true, [Full(Me), new RawAce(0, M.OiCi, M.Read, Users)]);
         var outside = Path.Combine(tmp, "outside");
@@ -342,9 +337,9 @@ public sealed class Win32Tests : IDisposable
         var scratch = new AdProvider(new LocalFs(), new LocalDirectory(), share, 20).Scan().Folders[@"C\Scratch"];
         Swap(Path.Combine(share, "C", "Scratch"), Path.Combine(share, "C", "Secret"));
         var p = new LocalProvider(share, 20);
-        var e = Assert.Throws<IOException>(() => p.SetFolderAcl(@"C\Scratch", false, [new Ace(Users, "Users", "wellknown", M.Write, Flags: M.OiCi)], scratch));
+        var e = Assert.Throws<IOException>(() => p.SetFolderAcl(@"C\Scratch", false, [new Ace(Users, "Users", "wellknown", M.Modify, Flags: M.OiCi)], scratch));
         Assert.Contains("no longer the folder that was scanned", e.Message);
-        Assert.DoesNotContain(fs.ReadDacl(@"C\Scratch").Aces, a => a.Sid == Users && a.Mask == M.Write); // the former Secret is untouched
+        Assert.DoesNotContain(fs.ReadDacl(@"C\Scratch").Aces, a => a.Sid == Users && a.Mask == M.Modify); // the former Secret is untouched
     }
 
     /// <summary>Even two folders with identical ACLs are told apart by their identity.</summary>
@@ -358,9 +353,9 @@ public sealed class Win32Tests : IDisposable
         Assert.NotEqual(snap.Folders[@"C\One"].Id, snap.Folders[@"C\Two"].Id);
         Swap(Path.Combine(share, "C", "One"), Path.Combine(share, "C", "Two"));
         var p = new LocalProvider(share, 20);
-        Assert.Throws<IOException>(() => p.SetFolderAcl(@"C\One", false, [new Ace(Users, "Users", "wellknown", M.Write, Flags: M.OiCi)], snap.Folders[@"C\One"]));
+        Assert.Throws<IOException>(() => p.SetFolderAcl(@"C\One", false, [new Ace(Users, "Users", "wellknown", M.Modify, Flags: M.OiCi)], snap.Folders[@"C\One"]));
         // without a swap the same write goes through
-        p.SetFolderAcl(@"C\Two", false, [new Ace(Users, "Users", "wellknown", M.Write, Flags: M.OiCi)], new AdProvider(new LocalFs(), new LocalDirectory(), share, 20).Scan().Folders[@"C\Two"]);
+        p.SetFolderAcl(@"C\Two", false, [new Ace(Users, "Users", "wellknown", M.Modify, Flags: M.OiCi)], new AdProvider(new LocalFs(), new LocalDirectory(), share, 20).Scan().Folders[@"C\Two"]);
     }
 
     /// <summary>An ACL changed between the conflict check and the write (here: right before the write) is not overwritten.</summary>
@@ -370,7 +365,7 @@ public sealed class Win32Tests : IDisposable
         var snapC = new AdProvider(new LocalFs(), new LocalDirectory(), share, 20).Scan().Folders["C"];
         Fs().WriteDacl("C", false, [new RawAce(0, M.OiCi, M.Read, M.Admins)]); // someone in Explorer
         var p = new LocalProvider(share, 20);
-        var e = Assert.Throws<IOException>(() => p.SetFolderAcl("C", false, [new Ace(Users, "Users", "wellknown", M.Write, Flags: M.OiCi)], snapC));
+        var e = Assert.Throws<IOException>(() => p.SetFolderAcl("C", false, [new Ace(Users, "Users", "wellknown", M.Modify, Flags: M.OiCi)], snapC));
         Assert.Contains("changed outside owlseye", e.Message);
     }
 
@@ -542,7 +537,7 @@ public sealed class Win32Tests : IDisposable
         s.SetCell(Users, rel, "W");
         var o = Apply(s);
         Assert.False(o.Error, o.Message);
-        Assert.Contains(Fs().ReadDacl(rel).Aces, a => a.Sid == Users && a.Mask == M.Write && (a.Flags & M.InheritedAce) == 0);
+        Assert.Contains(Fs().ReadDacl(rel).Aces, a => a.Sid == Users && a.Mask == M.Modify && (a.Flags & M.InheritedAce) == 0);
         Assert.Equal("W", st.Cells[(Users, rel)].Direct);
     }
 
