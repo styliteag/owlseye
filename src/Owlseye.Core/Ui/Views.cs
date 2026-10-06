@@ -185,7 +185,8 @@ public sealed record Grant(string Name, string Right, string? Source);
 /// <summary>What owlseye checked, shown above the findings so that an empty list means something.</summary>
 /// <param name="Kept">folders users cannot delete, rename or move (Rights.Kept)</param>
 /// <param name="StillMovable">of these, the ones some W entry still lets users move (Rights.StillMovable)</param>
-public sealed record FindingChecks(int Folders, int Moved, int Kept, int StillMovable);
+/// <param name="WMinus">own W- entries (write without delete), which "Convert all to W|" changes</param>
+public sealed record FindingChecks(int Folders, int Moved, int Kept, int StillMovable, int WMinus = 0);
 
 /// <summary>An entry of a hidden account on a folder (SYSTEM, Domain Admins, …), shown in the folder panel.</summary>
 public sealed record HiddenEntry(string Name, string Right, bool Inherited);

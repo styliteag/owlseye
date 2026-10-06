@@ -8,6 +8,11 @@
     <span><b>Checked</b> @c.Folders folders.</span>
     <span>Moved folders (they keep the rights of where they were): <b class="@(c.Moved > 0 ? "loss" : "")">@c.Moved</b>.</span>
     <span>Folders users cannot move (📌): <b>@c.Kept</b>@(c.StillMovable > 0 ? $", {c.StillMovable} of them not completely (see below)" : "").</span>
+    <span>W- entries (nothing can be deleted below): <b>@c.WMinus</b>.</span>
+    @if (c.WMinus > 0)
+    {
+      <button disabled="@Ui.Busy" title="Every W- becomes W|: Modify on that folder only. Below it the group loses write access; the preview shows who loses what." @onclick="WMinusToWList">Convert all to W|…</button>
+    }
   </p>
 }
 @if (items.Count > 0)
@@ -34,4 +39,6 @@ else
     items = S.FindingsPage();
     checks = S.FindingsChecks();
   }
+
+  void WMinusToWList() => Go(S.ConvertAll("W-", "W|"));
 }

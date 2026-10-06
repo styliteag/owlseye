@@ -136,6 +136,31 @@ public sealed class RightsSettingsTests : TestBase, IDisposable
     }
 
     [Fact]
+    public void AllWMinusCanBeChangedToWListInOneGo()
+    {
+        var st = new State(new Config { Provider = "demo", Audit = Path.Combine(Tmp, "log.jsonl") }, new DemoProvider());
+        st.Load();
+        var s = new Session(st);
+        s.SetCell(Demo.Gsid("G-HR"), Staff, "W-");
+        s.SetCell(Demo.Gsid("G-IT"), "Public", "W-");
+        Assert.False(s.Apply("", s.Preview().Phash).Error);
+        Assert.Equal(2, s.FindingsChecks().WMinus);
+
+        Assert.Equal("/preview", s.ConvertAll("W-", "W|").Url);
+        Assert.Equal(2, st.PendingCount);
+        var op = s.Preview().Plan!.AclOps.Single(o => o.Path == Staff);
+        Assert.Equal([(M.Modify, M.ThisFolder)], op.After.Where(a => a.Sid == Demo.Gsid("G-HR")).Select(a => (a.Mask, a.Flags)));
+        Assert.False(s.Apply("", s.Preview().Phash).Error);
+        Assert.Equal(0, s.FindingsChecks().WMinus);
+        Assert.Equal("W|", st.Cells[(Demo.Gsid("G-HR"), Staff)].Direct);
+        Assert.Equal("No W- entries to change.", s.ConvertAll("W-", "W|").Message);
+
+        s.Undo(st.Audit.Entries().First(e => e.Arr("acl_ops") is { Count: > 0 }).Str("id")!);
+        Assert.False(s.Apply("undo", s.Preview().Phash).Error);
+        Assert.Equal(2, s.FindingsChecks().WMinus);
+    }
+
+    [Fact]
     public void AFolderKeptFromMovingHasItsWWrittenAsTwoEntries()
     {
         var kept = M.StandardAces("W", kept: true);

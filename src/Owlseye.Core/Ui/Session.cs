@@ -863,7 +863,30 @@ public sealed partial class Session(State st)
         lock (St.Lock)
         {
             var kept = St.Snap.Folders.Values.Where(Rights.Kept).ToList();
-            return new FindingChecks(St.Snap.Folders.Count, Rights.Stale(St.Snap).Count, kept.Count, kept.Count(f => Rights.StillMovable(f).Count > 0));
+            return new FindingChecks(St.Snap.Folders.Count, Rights.Stale(St.Snap).Count, kept.Count, kept.Count(f => Rights.StillMovable(f).Count > 0),
+                OwnEntries("W-").Count);
+        }
+    }
+
+    List<(string Sid, string Path)> OwnEntries(string value) =>
+        St.Cells.Where(kv => kv.Value.Direct == value).Select(kv => kv.Key).OrderBy(k => M.Lower(k.Path), M.Ci).ToList();
+
+    /// <summary>Every own entry with the value from becomes a pending change to the value to (e.g. all W- to W|); the
+    /// preview shows what that does for users before anything is written.</summary>
+    public Outcome ConvertAll(string from, string to)
+    {
+        if (!M.Cells.Contains(from) || !M.Cells.Contains(to)) throw new UserError($"Values must be one of {string.Join(", ", M.Cells)}");
+        lock (St.Lock)
+        {
+            var add = OwnEntries(from).Where(k => !St.Pending.ContainsKey(k)).ToList();
+            if (add.Count == 0) return new Outcome("/findings", $"No {from} entries to change.");
+            foreach (var k in add) St.Pending[k] = to;
+            CheckPlan(() =>
+            {
+                foreach (var k in add) St.Pending.Remove(k);
+            });
+            St.NotifyChanged();
+            return new Outcome("/preview", $"{add.Count} {from} entr{(add.Count == 1 ? "y" : "ies")} to change to {to}: check the effect on users, then apply.");
         }
     }
 

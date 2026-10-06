@@ -22,7 +22,7 @@ User → security group (e.g. universal) → folder ACL. A group may appear on a
 | --- | --- | --- |
 | `R` | Read, execute (`0x1200A9`), this folder + subfolders + files | `R` |
 | `W` | Modify (`0x1301BF`: read, execute, write and delete), this folder + subfolders + files | `W` |
-| `W-` | Read and write without delete (`0x1201BF`), this folder + subfolders + files: users add files and folders and change files, but delete, rename or move nothing below, not even their own. Word and Excel save through temporary files, so saving can fail: meant for folders things are only added to (scans, archive); a finding marks it | |
+| `W-` | Read and write without delete (`0x1201BF`), this folder + subfolders + files: users add files and folders and change files, but delete, rename or move nothing below, not even their own. Word and Excel save through temporary files, so saving can fail: meant for folders things are only added to (scans, archive); a finding marks it, and the Findings page changes all W- to W\| in one go (with a preview) | |
 | `R\|` | Read this folder only (list, to reach subfolders) | `R\|` |
 | `W\|` | The same as `W`, this folder only | `W\|` |
 | `F` | Full control (`0x1F01FF`), this folder + subfolders + files: also change permissions and take ownership; for admin and service groups (a finding marks it) | |
