@@ -131,6 +131,8 @@ public sealed class RightsSettingsTests : TestBase, IDisposable
         var after = plan.AclOps.Single(o => o.Path == Staff).After.Where(a => a.Sid == Demo.Gsid("G-HR")).Select(a => (a.Mask, a.Flags));
         Assert.Equal([(M.WriteNoDelete, M.OiCi)], after);
         Assert.Equal("W-", plan.CellsAfter[(Demo.Gsid("G-HR"), Staff + @"\2025")].Effective); // passes down
+        var w = Rights.Findings(plan.SnapAfter, cells: plan.CellsAfter).Where(f => f.Text.StartsWith("W- for G-HR")).ToList();
+        Assert.Equal([(Staff, "low")], w.Select(f => (f.Path, f.Severity))); // where it is set, not again below
     }
 
     [Fact]

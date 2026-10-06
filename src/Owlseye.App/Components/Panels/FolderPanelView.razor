@@ -87,9 +87,11 @@ else if (f.Level > 0)
       <button @onclick="() => OnKept.InvokeAsync(false)">Let users move it again</button>
     }
   </div>
-  <p class="muted small">Writes every W here as write without delete on the folder and Modify on its subfolders and files (W| as write
-    without delete); W set here later too. A moved folder would take its rights along. Folders below that inherit W can still
-    be moved: keep them on their own or break inheritance.</p>
+  <p class="muted small"><b>Only this folder is fixed.</b> Inside it, users with W work as before: they create, change, delete,
+    rename and move files and subfolders, also ones others created. A deeper folder that should stay where it is needs W
+    entries of its own and its own 📌, or broken inheritance. (A moved folder would take its rights along.) owlseye writes
+    every W here as write without delete on the folder itself and Modify on its subfolders and files, W| as write without
+    delete, and so every W set here later.</p>
 }
 @if (Model.CanAdd && !Model.IsNew)
 {

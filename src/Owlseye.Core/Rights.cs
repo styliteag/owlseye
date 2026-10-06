@@ -553,6 +553,9 @@ public static class Rights
                 o.Add(new("low", path, $"Non-standard entry for {ShortOf(snap, sid)} (shown as {c.Direct})"));
             else if (c.Direct == "F" && snap.Folders[path].Level <= maxLevel)
                 o.Add(new("low", path, $"Full control for {ShortOf(snap, sid)}: its members can change permissions and take ownership"));
+            else if (c.Direct == "W-" && c.Source == path && snap.Folders[path].Level <= maxLevel)
+                o.Add(new("low", path, $"W- for {ShortOf(snap, sid)}: its members can delete, rename or move nothing here or below, and "
+                    + "saving in Word or Excel can fail (they save through temporary files)"));
         foreach (var ((sid, anc), below) in Unreachable(snap, cells, maxLevel).Where(kv => !HiddenSid(snap, kv.Key.Sid)))
             o.Add(new("medium", anc, $"{ShortOf(snap, sid)} cannot open this folder to reach {below[0]} (R| missing)"));
         return o.OrderBy(x => SevRank[x.Severity]).ThenBy(x => M.Lower(x.Path), M.Ci).ThenBy(x => x.Text, M.Ci).ToList();

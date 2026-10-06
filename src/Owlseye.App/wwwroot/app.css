@@ -125,6 +125,7 @@ table.matrix td button.c:focus-visible { outline: 2px solid var(--accent); outli
 .c.F { background: var(--f); color: #fff; }
 .c.W- { background: var(--m); color: #fff; background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(255,255,255,.28) 4px 6px); }
 .kept-icon { font-size: 11px; margin-left: 2px; cursor: help; }
+.warn-note { border-left: 3px solid var(--warn); padding-left: 8px; }
 .c.movable { position: relative; }
 .c.movable::after { content: ""; position: absolute; top: 0; right: 0; border-top: 7px solid var(--warn); border-left: 7px solid transparent; }
 .moved-icon { border: 0; background: none; padding: 0 2px; color: var(--bad); font-weight: 700; cursor: pointer; }

@@ -40,6 +40,13 @@
       break;
   }
 </p>
+@if (info.Value == "W-")
+{
+  <p class="small warn-note"><b>W- passes down:</b> the members can add files and folders here and in every folder below and change
+    files, but they can delete, rename or move nothing, not even what they created themselves. Word, Excel and many other
+    programs save through temporary files they delete or rename afterwards, so saving can fail or leave such files behind.
+    W- suits folders things are only added to (scans, archive), not folders people work in.</p>
+}
 @if (Model.Options.Count > 0)
 {
   <div class="choices">
